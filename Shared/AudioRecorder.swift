@@ -2,17 +2,30 @@ import Foundation
 import AVFoundation
 import Combine
 
-public class AudioRecorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
+public class AudioRecorder: NSObject, ObservableObject {
     public static let shared = AudioRecorder()
 
-    private var audioRecorder: AVAudioRecorder?
-    private var audioFileURL: URL?
+    private let persistentInputEngine = AVAudioEngine()
+    private var persistentInputTapInstalled = false
+    private var shouldMaintainPersistentInput = false
+    private let captureLock = NSLock()
+    private var captureFile: AVAudioFile?
+    private var captureFileURL: URL?
+    private var captureFormat: AVAudioFormat?
+    private var captureWriteError: String?
 
     @Published public var isRecording = false
     @Published public var audioPower: Float = 0.0
+    /// True while the app owns an active input audio unit but discards frames.
+    /// This keeps the background-audio process alive between dictation rounds
+    /// without writing ambient audio to disk.
+    @Published public private(set) var isMicrophoneWarm = false
     /// Last concrete failure reason, so the UI can show something actionable.
     @Published public private(set) var lastError: String?
-    private var timer: Timer?
+
+    public var isPersistentInputRunning: Bool {
+        persistentInputEngine.isRunning
+    }
 
     public override init() {
         super.init()
@@ -36,7 +49,7 @@ public class AudioRecorder: NSObject, ObservableObject, AVAudioRecorderDelegate 
         guard let files = try? FileManager.default.contentsOfDirectory(
             at: dir, includingPropertiesForKeys: [.contentModificationDateKey]) else { return }
         let cutoff = Date().addingTimeInterval(-24 * 3600)
-        for file in files where file.pathExtension == "wav" {
+        for file in files where ["wav", "caf"].contains(file.pathExtension.lowercased()) {
             if let date = try? file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,
                date < cutoff {
                 try? FileManager.default.removeItem(at: file)
@@ -52,84 +65,167 @@ public class AudioRecorder: NSObject, ObservableObject, AVAudioRecorderDelegate 
         }
     }
 
-    public func startRecording() -> URL? {
-        let session = AVAudioSession.sharedInstance()
+    /// Starts the long-lived input unit used between dictation rounds.
+    ///
+    /// The tap intentionally discards every buffer. A real WAV file is opened
+    /// only after the keyboard explicitly requests a recording round.
+    @discardableResult
+    public func startPersistentInput() -> Bool {
+        shouldMaintainPersistentInput = true
+
+        guard !isRecording else { return true }
+        if persistentInputEngine.isRunning {
+            isMicrophoneWarm = true
+            lastError = nil
+            return true
+        }
+        guard AVAudioSession.sharedInstance().recordPermission == .granted else {
+            lastError = "麦克风权限未生效，请在 iPhone 设置中允许 qwen3asr 访问麦克风后重试"
+            return false
+        }
+
         do {
-            try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
-            try session.setActive(true)
+            try activateAudioSession()
+            try startPersistentInputEngine()
+            lastError = nil
+            return true
         } catch {
-            lastError = "音频会话启动失败: \(error.localizedDescription)"
-            print("Failed to set audio session: \(error)")
+            lastError = "后台麦克风保持失败: \(error.localizedDescription)"
+            print("Failed to keep microphone input active: \(error)")
+            return false
+        }
+    }
+
+    /// Re-establishes the input unit after a phone call, Siri, or an audio
+    /// route interruption. It is a no-op until persistent input was requested.
+    public func resumePersistentInputIfNeeded() {
+        guard shouldMaintainPersistentInput, !isRecording else { return }
+        _ = startPersistentInput()
+    }
+
+    public func startRecording() -> URL? {
+        guard AVAudioSession.sharedInstance().recordPermission == .granted else {
+            lastError = "麦克风权限未生效，请在 iPhone 设置中允许 qwen3asr 访问麦克风后重试"
+            return nil
+        }
+        guard persistentInputEngine.isRunning, let captureFormat else {
+            lastError = "后台麦克风服务已停止，请打开 qwen3asr 恢复后再录音"
             return nil
         }
 
         let dir = Self.recordingDirectory()
         Self.cleanUpOldRecordings(in: dir)
-        let fileURL = dir.appendingPathComponent("input_\(Int(Date().timeIntervalSince1970)).wav")
-        self.audioFileURL = fileURL
-
-        // 16kHz, 16-bit PCM, Mono WAV — the format Whisper expects.
-        let settings: [String: Any] = [
-            AVFormatIDKey: Int(kAudioFormatLinearPCM),
-            AVSampleRateKey: 16000.0,
-            AVNumberOfChannelsKey: 1,
-            AVLinearPCMBitDepthKey: 16,
-            AVLinearPCMIsBigEndianKey: false,
-            AVLinearPCMIsFloatKey: false,
-            AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
-        ]
+        let fileURL = dir.appendingPathComponent("input_\(UUID().uuidString).caf")
 
         do {
-            audioRecorder = try AVAudioRecorder(url: fileURL, settings: settings)
-            audioRecorder?.delegate = self
-            audioRecorder?.isMeteringEnabled = true
+            let file = try AVAudioFile(
+                forWriting: fileURL,
+                settings: captureFormat.settings,
+                commonFormat: captureFormat.commonFormat,
+                interleaved: captureFormat.isInterleaved
+            )
 
-            if audioRecorder?.record() == true {
-                lastError = nil
-                isRecording = true
-                startPowerTimer()
-                return fileURL
-            }
-            lastError = "录音器启动失败（record() 返回 false），可能是麦克风被占用或权限未生效"
+            captureLock.lock()
+            captureFile = file
+            captureFileURL = fileURL
+            captureWriteError = nil
+            captureLock.unlock()
+
+            lastError = nil
+            isRecording = true
+            isMicrophoneWarm = false
+            return fileURL
         } catch {
-            lastError = "录音器创建失败: \(error.localizedDescription)"
-            print("Failed to start recording: \(error)")
+            lastError = "录音文件创建失败: \(error.localizedDescription)"
+            print("Failed to create recording file: \(error)")
         }
         return nil
     }
 
     public func stopRecording(completion: @escaping (URL?) -> Void) {
-        stopPowerTimer()
-        audioRecorder?.stop()
+        captureLock.lock()
+        let recordedURL = captureFileURL
+        let writeError = captureWriteError
+        captureFile = nil
+        captureFileURL = nil
+        captureWriteError = nil
+        captureLock.unlock()
+
         isRecording = false
+        audioPower = 0
+        isMicrophoneWarm = persistentInputEngine.isRunning
 
-        let recordedURL = self.audioFileURL
-        self.audioFileURL = nil
-
-        do {
-            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        } catch {
-            print("Failed to deactivate audio session: \(error)")
+        if let writeError {
+            lastError = "录音写入失败: \(writeError)"
+            if let recordedURL {
+                try? FileManager.default.removeItem(at: recordedURL)
+            }
+            completion(nil)
+            return
         }
 
         completion(recordedURL)
     }
 
-    private func startPowerTimer() {
-        timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
-            guard let self = self, let recorder = self.audioRecorder, recorder.isRecording else { return }
-            recorder.updateMeters()
-            let power = recorder.averagePower(forChannel: 0)
-            let normalized = max(0.0, min(1.0, (power + 60.0) / 60.0))
-            DispatchQueue.main.async {
-                self.audioPower = normalized
-            }
-        }
+    private func activateAudioSession() throws {
+        let session = AVAudioSession.sharedInstance()
+        try session.setCategory(
+            .playAndRecord,
+            mode: .default,
+            options: [.defaultToSpeaker, .allowBluetoothHFP, .mixWithOthers]
+        )
+        try session.setActive(true)
     }
 
-    private func stopPowerTimer() {
-        timer?.invalidate()
-        timer = nil
-        audioPower = 0.0
+    private func startPersistentInputEngine() throws {
+        guard !persistentInputEngine.isRunning else {
+            isMicrophoneWarm = true
+            return
+        }
+
+        let input = persistentInputEngine.inputNode
+        let format = input.outputFormat(forBus: 0)
+        guard format.sampleRate > 0, format.channelCount > 0 else {
+            throw AudioRecorderError.noInputFormat
+        }
+
+        captureFormat = format
+        if !persistentInputTapInstalled {
+            input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+                guard let self else { return }
+
+                self.captureLock.lock()
+                if let file = self.captureFile {
+                    do {
+                        try file.write(from: buffer)
+                    } catch {
+                        self.captureWriteError = error.localizedDescription
+                        self.captureFile = nil
+                    }
+                }
+                self.captureLock.unlock()
+            }
+            persistentInputTapInstalled = true
+        }
+        persistentInputEngine.prepare()
+
+        do {
+            try persistentInputEngine.start()
+            isMicrophoneWarm = true
+        } catch {
+            isMicrophoneWarm = false
+            throw error
+        }
+    }
+}
+
+private enum AudioRecorderError: LocalizedError {
+    case noInputFormat
+
+    var errorDescription: String? {
+        switch self {
+        case .noInputFormat:
+            return "系统没有提供可用的麦克风输入格式"
+        }
     }
 }

@@ -5,6 +5,7 @@ enum WhisperTranscriptionError: LocalizedError {
     case modelMissing
     case modelLoadFailed
     case unsupportedAudio
+    case noSpeech
     case transcriptionFailed
 
     var errorDescription: String? {
@@ -15,6 +16,8 @@ enum WhisperTranscriptionError: LocalizedError {
             return "Whisper 模型加载失败。"
         case .unsupportedAudio:
             return "录音不是 16 kHz、单声道、16 位 PCM WAV。"
+        case .noSpeech:
+            return "录音中没有检测到清晰语音，请检查麦克风输入后重试。"
         case .transcriptionFailed:
             return "Whisper 未能完成识别。"
         }
@@ -36,6 +39,9 @@ actor WhisperTranscriber {
         let samples = try PCM16WAV.samples(from: audioFileURL)
         guard !samples.isEmpty else {
             throw WhisperTranscriptionError.unsupportedAudio
+        }
+        guard PCM16WAV.containsAudibleSignal(samples) else {
+            throw WhisperTranscriptionError.noSpeech
         }
 
         guard let modelURL = Bundle.main.url(forResource: Self.modelName, withExtension: "bin") else {
@@ -63,14 +69,22 @@ actor WhisperTranscriber {
         parameters.print_timestamps = false
         parameters.print_special = false
         parameters.translate = false
-        parameters.language = nil // nil asks the multilingual model to detect the language.
-        parameters.detect_language = true
+        // whisper.cpp accepts nullptr, an empty string, or "auto" for
+        // language detection. Keep the pointer alive through whisper_full;
+        // explicitly using "auto" is more reliable across the simulator and
+        // device framework builds than combining a nil pointer with the
+        // detect_language flag.
+        let language = Array("auto".utf8CString)
+        parameters.detect_language = false
         parameters.no_context = true
         parameters.single_segment = false
         parameters.n_threads = Int32(max(1, min(4, ProcessInfo.processInfo.processorCount - 2)))
 
-        let result = samples.withUnsafeBufferPointer { buffer in
-            whisper_full(context, parameters, buffer.baseAddress, Int32(buffer.count))
+        let result = language.withUnsafeBufferPointer { languageBuffer in
+            parameters.language = languageBuffer.baseAddress
+            return samples.withUnsafeBufferPointer { buffer in
+                whisper_full(context, parameters, buffer.baseAddress, Int32(buffer.count))
+            }
         }
         guard result == 0 else {
             throw WhisperTranscriptionError.transcriptionFailed
@@ -89,6 +103,21 @@ actor WhisperTranscriber {
 }
 
 private enum PCM16WAV {
+    /// Reject near-silent captures before loading the model. This commonly
+    /// happens when Simulator's audio input is not connected to the Mac mic.
+    static func containsAudibleSignal(_ samples: [Float]) -> Bool {
+        guard !samples.isEmpty else { return false }
+
+        var peak: Float = 0
+        var sumOfSquares = 0.0
+        for sample in samples {
+            peak = max(peak, abs(sample))
+            sumOfSquares += Double(sample * sample)
+        }
+        let rootMeanSquare = sqrt(sumOfSquares / Double(samples.count))
+        return peak >= 0.01 || rootMeanSquare >= 0.002
+    }
+
     static func samples(from url: URL) throws -> [Float] {
         let data = try Data(contentsOf: url)
         guard data.count >= 44,
@@ -117,7 +146,16 @@ private enum PCM16WAV {
                 sampleRate = littleEndianUInt32(in: data, at: contentStart + 4)
                 bitsPerSample = littleEndianUInt16(in: data, at: contentStart + 14)
             } else if chunkID == "data" {
-                audioBytes = data[contentStart..<contentEnd]
+                // A Data slice keeps the original index range. The sample
+                // loop below is intentionally zero-based, so materialize a
+                // new Data value before indexing it; otherwise a valid WAV
+                // with a non-44-byte chunk layout can trap in Data.subscript.
+                // AVAudioRecorder may leave the chunk length at zero if iOS
+                // suspends or kills the recording owner before it finalizes
+                // the header. The PCM frames are still present after the
+                // header, so recover them from the actual end of the file.
+                let audioEnd = chunkSize == 0 ? data.count : contentEnd
+                audioBytes = Data(data[contentStart..<audioEnd])
                 break
             }
 

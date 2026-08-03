@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var recordController = AppRecordController.shared
+    @StateObject private var audioRecorder = AudioRecorder.shared
 
     var body: some View {
         NavigationView {
@@ -41,6 +42,24 @@ struct ContentView: View {
                 }
                 .padding(14)
                 .background(Color.red.opacity(0.08))
+                .cornerRadius(12)
+            } else if audioRecorder.isMicrophoneWarm {
+                HStack(spacing: 12) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.headline)
+                        .foregroundColor(.green)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("后台语音服务已就绪")
+                            .font(.subheadline)
+                            .fontWeight(.bold)
+                        Text("麦克风保持开启；未点击键盘语音按钮时，输入帧会被直接丢弃，不写入文件")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                }
+                .padding(14)
+                .background(Color.green.opacity(0.08))
                 .cornerRadius(12)
             } else if !recordController.lastMessage.isEmpty {
                 HStack(spacing: 12) {
@@ -138,8 +157,8 @@ struct ContentView: View {
             }
             VStack(alignment: .leading, spacing: 12) {
                 guideStepRow(step: "1", title: "添加键盘", desc: "设置 → 通用 → 键盘 → 键盘 → 添加新键盘 → qwen3asr 输入法")
-                guideStepRow(step: "2", title: "开启完全访问", desc: "进入 qwen3asr 输入法，开启「允许完全访问」，以便键盘唤起本 App 录音。")
-                guideStepRow(step: "3", title: "开始语音输入", desc: "在任意文本框切换到 qwen3asr 输入法，点击语音按钮。App 会短暂打开并开始录音，随后自动回到键盘；再次点击按钮停止并转写。")
+                guideStepRow(step: "2", title: "开启完全访问", desc: "进入 qwen3asr 输入法，开启「允许完全访问」，让键盘能使用本机录音与离线转写组件。")
+                guideStepRow(step: "3", title: "开始语音输入", desc: "在任意文本框切换到 qwen3asr 输入法，点击语音按钮即可原地录音；再次点击停止后，文字会直接插入当前输入框。")
                 guideStepRow(step: "4", title: "麦克风权限", desc: "第一次点击语音按钮时，请在弹出的对话框中选择「允许」。若之前拒绝了，可在本页下方或 iPhone 设置中重新开启。")
             }
             Button(action: {
@@ -167,7 +186,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 8) {
             Label("使用提示", systemImage: "info.circle")
                 .font(.headline)
-            Text("离线模型首次识别需要加载片刻；录音结束后请等待转写完成。较长录音会消耗更多时间与电量。")
+            Text("为了让键盘可连续开始下一轮，打开本 App 后麦克风会在后台保持开启，状态栏会显示橙色麦克风指示。只有当前 qwen3asr 键盘启动录音时才写入音频文件；待机采样会立即丢弃。持续后台运行会增加耗电，iOS 仍可能在资源紧张时结束 App。")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
         }

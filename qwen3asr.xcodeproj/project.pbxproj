@@ -9,6 +9,9 @@
 /* Begin PBXBuildFile section */
 		3A9B1002301CF000001425BE /* Vendor/build-apple/whisper.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3A9B1001301CF000001425BE /* Vendor/build-apple/whisper.xcframework */; };
 		3A9B1003301CF000001425BE /* Vendor/build-apple/whisper.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 3A9B1001301CF000001425BE /* Vendor/build-apple/whisper.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		3A9B1005301CF000001425BE /* Vendor/build-apple/whisper.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3A9B1001301CF000001425BE /* Vendor/build-apple/whisper.xcframework */; };
+		3A9B1006301CF000001425BE /* Vendor/build-apple/whisper.xcframework in App Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 3A9B1001301CF000001425BE /* Vendor/build-apple/whisper.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		3A9B1007301CF000001425BE /* Qwen3ASRKeyboard/Models/ggml-base-q5_1.bin in Resources */ = {isa = PBXBuildFile; fileRef = 3A9B1008301CF000001425BE /* Qwen3ASRKeyboard/Models/ggml-base-q5_1.bin */; };
 		7B5F739C301CEAF8001425BE /* Qwen3ASRKeyboard.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 7B5F7391301CEAF8001425BE /* Qwen3ASRKeyboard.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -48,6 +51,17 @@
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		3A9B1009301CF000001425BE /* App Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				3A9B1006301CF000001425BE /* Vendor/build-apple/whisper.xcframework in App Embed Frameworks */,
+			);
+			name = "App Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		7B5F739B301CEAF8001425BE /* Embed App Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -63,6 +77,7 @@
 
 /* Begin PBXFileReference section */
 		3A9B1001301CF000001425BE /* Vendor/build-apple/whisper.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = "Vendor/build-apple/whisper.xcframework"; sourceTree = "<group>"; };
+		3A9B1008301CF000001425BE /* Qwen3ASRKeyboard/Models/ggml-base-q5_1.bin */ = {isa = PBXFileReference; lastKnownFileType = archive.macbinary; path = "Qwen3ASRKeyboard/Models/ggml-base-q5_1.bin"; sourceTree = "<group>"; };
 		7B5F7364301CEAF7001425BE /* qwen3asr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = qwen3asr.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7B5F7371301CEAF8001425BE /* qwen3asrTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = qwen3asrTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		7B5F737B301CEAF8001425BE /* qwen3asrUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = qwen3asrUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -102,6 +117,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3A9B1005301CF000001425BE /* Vendor/build-apple/whisper.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -139,6 +155,7 @@
 				7B5F7374301CEAF8001425BE /* qwen3asrTests */,
 				7B5F737E301CEAF8001425BE /* qwen3asrUITests */,
 				3A9B1001301CF000001425BE /* Vendor/build-apple/whisper.xcframework */,
+				3A9B1008301CF000001425BE /* Qwen3ASRKeyboard/Models/ggml-base-q5_1.bin */,
 				7B5F7365301CEAF8001425BE /* Products */,
 			);
 			sourceTree = "<group>";
@@ -165,6 +182,7 @@
 				7B5F7361301CEAF7001425BE /* Frameworks */,
 				7B5F7362301CEAF7001425BE /* Resources */,
 				7B5F739B301CEAF8001425BE /* Embed App Extensions */,
+				3A9B1009301CF000001425BE /* App Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -304,6 +322,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3A9B1007301CF000001425BE /* Qwen3ASRKeyboard/Models/ggml-base-q5_1.bin in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -513,7 +532,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "qwen3asr-Info.plist";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "需要访问您的麦克风，以便通过本机 Whisper 模型将您的语音转换为文字。";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "需要在后台保持麦克风输入，以便语音键盘连续响应；未点击语音按钮时不会保存音频。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -548,7 +567,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "qwen3asr-Info.plist";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "需要访问您的麦克风，以便通过本机 Whisper 模型将您的语音转换为文字。";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "需要在后台保持麦克风输入，以便语音键盘连续响应；未点击语音按钮时不会保存音频。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

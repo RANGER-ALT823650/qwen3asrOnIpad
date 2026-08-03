@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 public struct KeyboardView: View {
     public weak var controller: UIInputViewController?
@@ -7,7 +8,9 @@ public struct KeyboardView: View {
     @State private var isTranscribing = false
     @State private var statusText = "Whisper base 已就绪，点击说话"
     @State private var isModelAvailable = WhisperTranscriber.isModelBundled
-    @State private var pollTimer: Timer?
+    @State private var recordingAttemptID = UUID()
+
+    private let statusPoller = Timer.publish(every: 0.35, on: .main, in: .common).autoconnect()
 
     public init(controller: UIInputViewController? = nil) {
         self.controller = controller
@@ -59,16 +62,19 @@ public struct KeyboardView: View {
             .frame(height: 24)
 
             HStack(spacing: 12) {
-                if let controller, controller.needsInputModeSwitchKey {
-                    Button(action: { controller.advanceToNextInputMode() }) {
-                        Image(systemName: "globe")
-                            .font(.system(size: 20))
-                            .frame(width: 44, height: 50)
-                            .background(Color(UIColor.tertiarySystemFill))
-                            .cornerRadius(8)
-                            .foregroundColor(.primary)
-                    }
+                // Do not read `needsInputModeSwitchKey` while SwiftUI is
+                // building the view. On recent Simulator runtimes the
+                // keyboard host connection may not exist yet, and that
+                // getter can terminate the extension during first activation.
+                Button(action: { controller?.advanceToNextInputMode() }) {
+                    Image(systemName: "globe")
+                        .font(.system(size: 20))
+                        .frame(width: 44, height: 50)
+                        .background(Color(UIColor.tertiarySystemFill))
+                        .cornerRadius(8)
+                        .foregroundColor(.primary)
                 }
+                .accessibilityLabel("切换输入法")
 
                 voiceButton.frame(maxWidth: .infinity)
 
@@ -97,16 +103,19 @@ public struct KeyboardView: View {
         .background(Color(UIColor.secondarySystemGroupedBackground).ignoresSafeArea())
         .onAppear {
             isModelAvailable = WhisperTranscriber.isModelBundled
-            statusText = isModelAvailable ? "Whisper base 已就绪，点击说话" : "未找到内置模型，请重新安装 App"
-            DarwinNotifications.observe(DarwinNotifications.statusChanged) {
-                refreshStatus()
-            }
-            startPolling()
-            recoverColdStart()
+            AppGroupBridge.markKeyboardActive()
+            observeSharedRecordStatus()
+            refreshSharedRecordStatus()
         }
-        .onDisappear {
-            pollTimer?.invalidate()
-            pollTimer = nil
+        .onReceive(statusPoller) { _ in
+            // Darwin notifications are edge-triggered and can be missed while
+            // iOS tears down or recreates the keyboard extension. Polling the
+            // tiny shared state prevents a new keyboard process from showing
+            // an obsolete state forever.
+            if AppGroupBridge.keyboardActiveAge > 0.8 {
+                AppGroupBridge.markKeyboardActive()
+            }
+            refreshSharedRecordStatus()
         }
     }
 
@@ -129,13 +138,15 @@ public struct KeyboardView: View {
             }
         }
         .disabled(isTranscribing || !isModelAvailable)
+        .accessibilityIdentifier("voiceInputButton")
+        .accessibilityLabel(buttonTitle)
     }
 
     private var buttonColor: Color {
         switch recordStatus {
         case .recording: return .red
         case .requested: return .gray
-        case .stopped: return .blue
+        case .stopped, .transcribing, .completed: return .blue
         default: return .blue
         }
     }
@@ -144,7 +155,7 @@ public struct KeyboardView: View {
         switch recordStatus {
         case .recording: return "点击 停止录音"
         case .requested: return "正在启动…"
-        case .stopped: return "识别中…"
+        case .stopped, .transcribing: return "识别中…"
         default: return "点击 语音输入"
         }
     }
@@ -170,8 +181,9 @@ public struct KeyboardView: View {
         }
     }
 
-    /// Tap 1: ask the (possibly backgrounded) app to start recording; if the
-    /// app is not alive, fall back to opening `qwen3asr://record`.
+    /// iOS does not permit a third-party keyboard extension to capture audio,
+    /// even after the user grants microphone permission. The container app owns
+    /// the audio session and reports progress through the shared App Group.
     private func startVoiceFlow() {
         guard isModelAvailable else {
             statusText = "未找到内置模型，请重新安装 App"
@@ -182,134 +194,126 @@ public struct KeyboardView: View {
             return
         }
 
-        AppGroupBridge.setStatus(.requested)
         recordStatus = .requested
         statusText = "正在启动录音…"
+        AppGroupBridge.setStatus(.requested)
+
+        // If the container app still has a live process, this starts recording
+        // without bringing it to the foreground.
         DarwinNotifications.post(DarwinNotifications.startRecording)
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak controller] in
-            guard AppGroupBridge.status == .requested else { return }
-            let url = URL(string: "qwen3asr://record")!
-            controller?.extensionContext?.open(url)
-        }
-
-        // Fallback hint: if the app still has not answered shortly after the
-        // URL open attempt, tell the user what to do instead of hanging.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-            if AppGroupBridge.status == .requested {
-                statusText = "无法自动唤起 App，请先手动打开一次 qwen3asr App"
-            }
-        }
-    }
-
-    /// Tap 2: ask the app to stop recording; it publishes the WAV path and we
-    /// transcribe locally once the shared status flips to `.stopped`.
-    private func stopVoiceFlow() {
-        isTranscribing = true
-        statusText = "正在等待录音保存…"
-        DarwinNotifications.post(DarwinNotifications.stopRecording)
-    }
-
-    // MARK: - Shared status sync
-
-    private func startPolling() {
-        pollTimer?.invalidate()
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak controller] _ in
-            guard controller != nil else { return }
-            refreshStatus()
-        }
-    }
-
-    private func refreshStatus() {
-        let status = AppGroupBridge.status
-        guard status != recordStatus else {
-            // While transcribing, surface a hint if the app never answered.
-            if isTranscribing, recordStatus == .recording,
-               Date().timeIntervalSince1970 - AppGroupBridge.updatedAt > 8 {
-                statusText = "App 未响应，请重新打开 App 后再试"
-            }
+        guard let recordURL = URL(string: "qwen3asr://record") else {
+            recordStatus = .error
+            statusText = "无法创建录音请求，请重试"
             return
         }
 
-        recordStatus = status
-        switch status {
-        case .requested:
-            statusText = "正在启动录音…"
-        case .recording:
-            statusText = "🎙️ 正在录音… 点击停止"
-        case .stopped:
-            if !isTranscribing, let path = AppGroupBridge.pendingWavPath {
-                beginTranscription(wavPath: path)
+        let attemptID = UUID()
+        recordingAttemptID = attemptID
+
+        // A keyboard extension is not allowed to use NSExtensionContext.open.
+        // For the sideloaded build, invoke the containing UIApplication through
+        // the responder chain only when its existing process did not respond.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            guard recordingAttemptID == attemptID,
+                  AppGroupBridge.status == .requested else { return }
+
+            controller?.openContainingApp(at: recordURL) { didOpen in
+                guard recordingAttemptID == attemptID,
+                      AppGroupBridge.status == .requested else { return }
+
+                if didOpen {
+                    statusText = "正在打开 qwen3asr 开始录音…"
+                } else {
+                    // Keep the shared request pending so manually opening the
+                    // app can still take it over during the timeout window.
+                    recordStatus = .requested
+                    statusText = "App 已被系统结束，请打开 qwen3asr 恢复后台服务"
+                    AppGroupBridge.setStatus(.requested, message: statusText)
+                }
             }
-        case .micDenied:
-            statusText = AppGroupBridge.lastMessage ?? "麦克风权限被拒绝"
-        case .error:
-            statusText = AppGroupBridge.lastMessage ?? "录音出错"
-        case .idle:
-            statusText = isModelAvailable ? "Whisper base 已就绪，点击说话" : "未找到内置模型，请重新安装 App"
+        }
+
+        // Do not leave the keyboard indefinitely disabled if the app was
+        // removed, killed during launch, or otherwise failed to handle the URL.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 12) {
+            guard recordingAttemptID == attemptID,
+                  AppGroupBridge.status == .requested else { return }
+            recordStatus = .error
+            statusText = "后台服务未运行，请打开 qwen3asr 后返回键盘"
+            AppGroupBridge.setStatus(.error, message: statusText)
         }
     }
 
-    /// If the keyboard process was killed while the app recorded, recover the
-    /// pending WAV the next time the keyboard appears.
-    private func recoverColdStart() {
-        let status = AppGroupBridge.status
-        switch status {
-        case .stopped:
-            if let path = AppGroupBridge.pendingWavPath,
-               Date().timeIntervalSince1970 - AppGroupBridge.updatedAt < 600 {
-                beginTranscription(wavPath: path)
-            }
-        case .requested:
-            // Stale request from a keyboard that died mid-launch.
-            if Date().timeIntervalSince1970 - AppGroupBridge.updatedAt > 30 {
-                AppGroupBridge.setStatus(.idle)
-            }
-        case .recording:
-            statusText = "🎙️ 正在录音… 点击停止"
-            recordStatus = .recording
-        default:
-            break
+    /// Tap 2: ask the container app to stop recording and transcribe the WAV.
+    private func stopVoiceFlow() {
+        guard recordStatus == .recording else {
+            print("KeyboardView: stopVoiceFlow 被调用但状态不是 recording: \(recordStatus)")
+            return
         }
-    }
 
-    // MARK: - Transcription
-
-    private func beginTranscription(wavPath: String) {
+        recordStatus = .transcribing
         isTranscribing = true
         statusText = "Whisper 正在本机识别..."
-        Task {
-            do {
-                let text = try await WhisperTranscriber.shared.transcribe(
-                    audioFileURL: URL(fileURLWithPath: wavPath)
-                )
-                await MainActor.run {
-                    finishTranscription(text: text, wavPath: wavPath)
-                }
-            } catch {
-                await MainActor.run {
-                    isTranscribing = false
-                    recordStatus = .idle
-                    AppGroupBridge.setStatus(.idle)
-                    AppGroupBridge.clearPending()
-                    statusText = "识别出错: \(error.localizedDescription)"
-                }
-            }
+        DarwinNotifications.post(DarwinNotifications.stopRecording)
+    }
+
+    private func observeSharedRecordStatus() {
+        DarwinNotifications.observe(DarwinNotifications.statusChanged) {
+            refreshSharedRecordStatus()
         }
     }
 
-    private func finishTranscription(text: String, wavPath: String) {
-        isTranscribing = false
-        recordStatus = .idle
-        AppGroupBridge.clearPending()
-        AppGroupBridge.setStatus(.idle)
-        try? FileManager.default.removeItem(atPath: wavPath)
-
-        if text.isEmpty {
-            statusText = "未识别到文字，请重试"
-        } else {
-            controller?.textDocumentProxy.insertText(text)
-            statusText = "已转写: \(text)"
+    private func refreshSharedRecordStatus() {
+        switch AppGroupBridge.status {
+        case .idle:
+            guard !isTranscribing else { return }
+            recordStatus = .idle
+            statusText = isModelAvailable ? "Whisper base 已就绪，点击说话" : "未找到内置模型，请重新安装 App"
+        case .requested:
+            guard AppGroupBridge.statusAge < 12 else {
+                isTranscribing = false
+                recordStatus = .error
+                statusText = "后台服务未运行，请打开 qwen3asr 后返回键盘"
+                AppGroupBridge.setStatus(.error, message: statusText)
+                return
+            }
+            recordStatus = .requested
+            statusText = AppGroupBridge.lastMessage ?? "正在启动录音…"
+        case .recording:
+            recordStatus = .recording
+            isTranscribing = false
+            statusText = "🎙️ 正在录音… 点击停止"
+        case .stopped, .transcribing:
+            guard AppGroupBridge.statusAge < 180 else {
+                isTranscribing = false
+                recordStatus = .error
+                statusText = "识别已超时，请打开 qwen3asr 后重新录音"
+                AppGroupBridge.setStatus(.error, message: statusText)
+                return
+            }
+            recordStatus = .transcribing
+            isTranscribing = true
+            statusText = "Whisper 正在本机识别..."
+        case .completed:
+            isTranscribing = false
+            recordStatus = .idle
+            let text = AppGroupBridge.transcriptionText ?? ""
+            if text.isEmpty {
+                statusText = "未识别到文字，请重试"
+            } else {
+                controller?.textDocumentProxy.insertText(text)
+                statusText = "已转写: \(text)"
+            }
+            AppGroupBridge.setStatus(.idle)
+        case .micDenied:
+            isTranscribing = false
+            recordStatus = .micDenied
+            statusText = AppGroupBridge.lastMessage ?? "麦克风权限被拒绝，请在设置中允许 qwen3asr 访问麦克风"
+        case .error:
+            isTranscribing = false
+            recordStatus = .error
+            statusText = AppGroupBridge.lastMessage ?? "录音或识别失败，请重试"
         }
     }
 }
