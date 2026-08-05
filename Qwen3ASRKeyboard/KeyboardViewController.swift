@@ -84,6 +84,7 @@ class KeyboardViewController: UIInputViewController {
     private func setupKeyboardView() {
         let keyboardView = KeyboardView(controller: self)
         let hostingController = UIHostingController(rootView: keyboardView)
+        hostingController.view.backgroundColor = .clear
         self.hostingController = hostingController
         
         addChild(hostingController)
