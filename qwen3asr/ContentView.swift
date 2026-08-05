@@ -34,7 +34,7 @@ struct ContentView: View {
                         Text("正在录音…")
                             .font(.subheadline)
                             .fontWeight(.bold)
-                        Text("回到正在输入的 App，点击键盘上的语音按钮即可停止")
+                        Text("在旁边日记 App 的键盘上再次点击语音按钮即可停止")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -50,7 +50,7 @@ struct ContentView: View {
                         Text("Qwen3-ASR 正在本机识别…")
                             .font(.subheadline)
                             .fontWeight(.bold)
-                        Text("请保持本页在前台；完成后会自动返回键盘")
+                        Text("保持本 App 与日记 App 分屏可见；文字会直接回传当前键盘")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -65,7 +65,7 @@ struct ContentView: View {
                         .font(.headline)
                         .foregroundColor(.green)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("后台语音服务已就绪")
+                        Text("分屏语音服务已就绪")
                             .font(.subheadline)
                             .fontWeight(.bold)
                         Text("麦克风保持开启；未点击键盘语音按钮时，输入帧会被直接丢弃，不写入文件")
@@ -118,7 +118,7 @@ struct ContentView: View {
                     Text("Qwen3-ASR 1.7B 离线语音输入")
                         .font(.title3)
                         .fontWeight(.bold)
-                    Text("录音和识别都在 iPhone 本机完成")
+                    Text("录音和识别都在 iPad 本机完成")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -152,7 +152,7 @@ struct ContentView: View {
             Text("已内置完整的 Qwen3-ASR 1.7B MLX 5-bit 模型，音频编码与文本解码复用同一份本地权重。识别过程不上传音频、不依赖局域网，也不需要启动 Mac 服务。")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
-            Label("最长录音 \(Int(AppGroupBridge.maximumRecordingDuration)) 秒；CPU 安全加载，前台 Metal 推理", systemImage: "cpu")
+                Label("最长录音 \(Int(AppGroupBridge.maximumRecordingDuration)) 秒；iPad 分屏前台 MLX 推理", systemImage: "cpu")
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
@@ -168,21 +168,22 @@ struct ContentView: View {
                 Image(systemName: "keyboard")
                     .foregroundColor(.indigo)
                     .font(.headline)
-                Text("iPhone 输入法设置")
+                Text("iPad 输入法设置")
                     .font(.headline)
             }
             VStack(alignment: .leading, spacing: 12) {
                 guideStepRow(step: "1", title: "添加键盘", desc: "设置 → 通用 → 键盘 → 键盘 → 添加新键盘 → qwen3asr 输入法")
                 guideStepRow(step: "2", title: "开启完全访问", desc: "进入 qwen3asr 输入法，开启「允许完全访问」，让键盘能使用本机录音与离线转写组件。")
-                guideStepRow(step: "3", title: "开始语音输入", desc: "在任意文本框切换到 qwen3asr 输入法，点击语音按钮即可原地录音；再次点击停止后会短暂打开本 App，识别完成后自动返回并插入文字。")
-                guideStepRow(step: "4", title: "麦克风权限", desc: "第一次点击语音按钮时，请在弹出的对话框中选择「允许」。若之前拒绝了，可在本页下方或 iPhone 设置中重新开启。")
+                guideStepRow(step: "3", title: "保持分屏", desc: "将千问3 ASR与日记 App 同时放在 iPad 前台，并在日记文本框切换到本输入法。")
+                guideStepRow(step: "4", title: "开始语音输入", desc: "点击语音按钮开始录音，再次点击后只通过 Darwin 通知让分屏中的本 App 停止、识别并回传文字。")
+                guideStepRow(step: "5", title: "麦克风权限", desc: "第一次使用时请选择「允许」。若之前拒绝，可在本页下方或 iPad 设置中重新开启。")
             }
             Button(action: {
                 if let url = URL(string: UIApplication.openSettingsURLString) {
                     UIApplication.shared.open(url)
                 }
             }) {
-                Label("打开 iPhone 设置", systemImage: "gearshape.fill")
+                Label("打开 iPad 设置", systemImage: "gearshape.fill")
                     .font(.subheadline)
                     .fontWeight(.semibold)
                     .frame(maxWidth: .infinity)
@@ -202,7 +203,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 8) {
             Label("使用提示", systemImage: "info.circle")
                 .font(.headline)
-            Text("为了让键盘可连续开始下一轮，打开本 App 后麦克风会在后台保持开启，状态栏会显示橙色麦克风指示。只有当前 qwen3asr 键盘启动录音时才写入音频文件；待机采样会立即丢弃。持续后台运行会增加耗电，iOS 仍可能在资源紧张时结束 App。")
+            Text("请在使用期间保持千问3 ASR与日记 App 分屏可见。本 App 会保持麦克风输入图处于就绪状态，只有键盘明确启动录音时才写入文件；待机采样会立即丢弃。若模型 App 不再位于前台，本轮不会启动 MLX 推理。")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
         }

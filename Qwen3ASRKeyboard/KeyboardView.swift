@@ -9,7 +9,6 @@ public struct KeyboardView: View {
     @State private var statusText = "Qwen3-ASR 1.7B 已就绪，点击说话"
     @State private var recordingElapsed: TimeInterval = 0
     @State private var recordingAttemptID = UUID()
-    @State private var didRequestForegroundTranscription = false
 
     private let statusPoller = Timer.publish(every: 0.35, on: .main, in: .common).autoconnect()
 
@@ -238,11 +237,7 @@ public struct KeyboardView: View {
 
         recordStatus = .requested
         statusText = "正在启动录音…"
-        AppGroupBridge.beginRequest()
-
-        // If the container app still has a live process, this starts recording
-        // without bringing it to the foreground.
-        DarwinNotifications.post(DarwinNotifications.startRecording)
+        let requestID = AppGroupBridge.beginRequest()
 
         guard let recordURL = URL(string: "qwen3asr://record") else {
             recordStatus = .error
@@ -253,24 +248,33 @@ public struct KeyboardView: View {
         let attemptID = UUID()
         recordingAttemptID = attemptID
 
-        // A keyboard extension is not allowed to use NSExtensionContext.open.
-        // For the sideloaded build, invoke the containing UIApplication through
-        // the responder chain only when its existing process did not respond.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+        // Preserve the iPad split without activating either app. A second
+        // Darwin edge covers a notification missed during process scheduling;
+        // the URL bridge is used only if this exact request remains unacknowledged.
+        DarwinNotifications.post(DarwinNotifications.startRecording)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
             guard recordingAttemptID == attemptID,
-                  AppGroupBridge.status == .requested else { return }
+                  AppGroupBridge.status == .requested,
+                  !AppGroupBridge.hasAcknowledgedRecordingRequest(requestID) else { return }
+            DarwinNotifications.post(DarwinNotifications.startRecording)
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            guard recordingAttemptID == attemptID,
+                  AppGroupBridge.status == .requested,
+                  !AppGroupBridge.hasAcknowledgedRecordingRequest(requestID) else { return }
 
             controller?.openContainingApp(at: recordURL) { didOpen in
                 guard recordingAttemptID == attemptID,
                       AppGroupBridge.status == .requested else { return }
 
                 if didOpen {
-                    statusText = "正在打开 qwen3asr 开始录音…"
+                    statusText = "模型 App 未响应，正在打开千问3 ASR…"
                 } else {
                     // Keep the shared request pending so manually opening the
                     // app can still take it over during the timeout window.
                     recordStatus = .requested
-                    statusText = "App 已被系统结束，请打开 qwen3asr 恢复后台服务"
+                    statusText = "模型 App 未响应，请打开千问3 ASR后重试"
                     AppGroupBridge.setStatus(.requested, message: statusText)
                 }
             }
@@ -282,7 +286,7 @@ public struct KeyboardView: View {
             guard recordingAttemptID == attemptID,
                   AppGroupBridge.status == .requested else { return }
             recordStatus = .error
-            statusText = "后台服务未运行，请打开 qwen3asr 后返回键盘"
+            statusText = "模型 App 未响应，请将千问3 ASR与日记 App 分屏显示"
             AppGroupBridge.setStatus(.error, message: statusText)
         }
     }
@@ -296,31 +300,8 @@ public struct KeyboardView: View {
 
         recordStatus = .transcribing
         isTranscribing = true
-        statusText = "正在打开 qwen3asr 前台识别…"
+        statusText = "Qwen3-ASR 正在分屏前台识别…"
         DarwinNotifications.post(DarwinNotifications.stopRecording)
-        openContainerForForegroundTranscription()
-    }
-
-    /// iOS terminates a non-frontmost app when the 1.7B model sustains enough
-    /// CPU work, while MLX Metal is unavailable in the background. Foreground
-    /// the container for the model pass, then let it suspend back here after it
-    /// publishes either text or a concrete error through the App Group.
-    private func openContainerForForegroundTranscription() {
-        guard !didRequestForegroundTranscription else { return }
-        didRequestForegroundTranscription = true
-
-        guard let stopURL = URL(string: "qwen3asr://stop") else {
-            didRequestForegroundTranscription = false
-            statusText = "无法创建识别请求，请手动打开 qwen3asr"
-            return
-        }
-
-        controller?.openContainingApp(at: stopURL) { didOpen in
-            if !didOpen {
-                didRequestForegroundTranscription = false
-                statusText = "系统未允许打开 qwen3asr，请手动打开 App 完成识别"
-            }
-        }
     }
 
     private func observeSharedRecordStatus() {
@@ -333,7 +314,6 @@ public struct KeyboardView: View {
         switch AppGroupBridge.status {
         case .idle:
             guard !isTranscribing else { return }
-            didRequestForegroundTranscription = false
             recordingElapsed = 0
             recordStatus = .idle
             statusText = AppGroupBridge.lastMessage
@@ -343,14 +323,13 @@ public struct KeyboardView: View {
             guard AppGroupBridge.statusAge < 12 else {
                 isTranscribing = false
                 recordStatus = .error
-                statusText = "后台服务未运行，请打开 qwen3asr 后返回键盘"
+                statusText = "模型 App 未响应，请将千问3 ASR与日记 App 分屏显示"
                 AppGroupBridge.setStatus(.error, message: statusText)
                 return
             }
             recordStatus = .requested
             statusText = AppGroupBridge.lastMessage ?? "正在启动录音…"
         case .recording:
-            didRequestForegroundTranscription = false
             recordStatus = .recording
             isTranscribing = false
             recordingElapsed = min(
@@ -362,34 +341,43 @@ public struct KeyboardView: View {
             recordingElapsed = 0
             recordStatus = .transcribing
             isTranscribing = true
-            statusText = AppGroupBridge.lastMessage ?? "Qwen3-ASR 正在本机识别…"
-            openContainerForForegroundTranscription()
+            statusText = AppGroupBridge.lastMessage
+                ?? "Qwen3-ASR 正在分屏前台识别…"
         case .completed:
             recordingElapsed = 0
             isTranscribing = false
-            didRequestForegroundTranscription = false
-            recordStatus = .idle
+            recordStatus = .completed
             let text = AppGroupBridge.transcriptionText ?? ""
             let warning = AppGroupBridge.lastMessage
             if text.isEmpty {
                 statusText = "未识别到文字，请重试"
-            } else {
-                controller?.textDocumentProxy.insertText(text)
-                statusText = warning ?? "已转写: \(text)"
+                AppGroupBridge.setStatus(.idle)
+                recordStatus = .idle
+                return
             }
+
+            // Keep a result pending if iOS temporarily replaced the diary app's
+            // keyboard process. It will be inserted once the real input view is
+            // visible again instead of being lost through a stale text proxy.
+            guard (controller as? KeyboardViewController)?.isKeyboardVisible == true else {
+                statusText = "识别完成，返回日记输入页面后将自动填入"
+                return
+            }
+
+            controller?.textDocumentProxy.insertText(text)
+            statusText = warning ?? "已转写: \(text)"
             // A repetition warning is informational: insert the complete text
             // unchanged, then keep the warning visible until the next request.
             AppGroupBridge.setStatus(.idle, message: warning)
+            recordStatus = .idle
         case .micDenied:
             recordingElapsed = 0
             isTranscribing = false
-            didRequestForegroundTranscription = false
             recordStatus = .micDenied
             statusText = AppGroupBridge.lastMessage ?? "麦克风权限被拒绝，请在设置中允许 qwen3asr 访问麦克风"
         case .error:
             recordingElapsed = 0
             isTranscribing = false
-            didRequestForegroundTranscription = false
             recordStatus = .error
             statusText = AppGroupBridge.lastMessage ?? "录音或识别失败，请重试"
         }

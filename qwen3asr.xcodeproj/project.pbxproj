@@ -190,6 +190,7 @@
 				7B5F7360301CEAF7001425BE /* Sources */,
 				7B5F7361301CEAF7001425BE /* Frameworks */,
 				7B5F7362301CEAF7001425BE /* Resources */,
+				C3000001301D0000001425BE /* Prepare Platform Model Resource */,
 				7B5F739B301CEAF8001425BE /* Embed App Extensions */,
 			);
 			buildRules = (
@@ -287,6 +288,7 @@
 				A1000004301D0000001425BE /* Sources */,
 				A1000005301D0000001425BE /* Frameworks */,
 				A1000006301D0000001425BE /* Resources */,
+				C3000002301D0000001425BE /* Prepare Platform Model Resource */,
 			);
 			buildRules = (
 			);
@@ -400,6 +402,53 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		C3000001301D0000001425BE /* Prepare Platform Model Resource */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/ModelAssets/Qwen3-ASR-1.7B-MLX-5bit/model.safetensors",
+				"/Volumes/FENNY/XcodeBuilds/qwen3asr/ModelAssets/Qwen3-ASR-1.7B-MLX-5bit/model.safetensors",
+			);
+			name = "Prepare Platform Model Resource";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/Qwen3-ASR-1.7B-MLX-5bit/model.safetensors",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "source_model=\"${SRCROOT}/ModelAssets/Qwen3-ASR-1.7B-MLX-5bit/model.safetensors\"\nbundled_model=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/Qwen3-ASR-1.7B-MLX-5bit/model.safetensors\"\nif [ \"${PLATFORM_NAME}\" = \"iphonesimulator\" ]; then\n    if [ -f \"${bundled_model}\" ] || [ -L \"${bundled_model}\" ]; then\n        /bin/unlink \"${bundled_model}\"\n    fi\nelif [ \"${PLATFORM_NAME}\" = \"iphoneos\" ] && { [ -L \"${bundled_model}\" ] || [ ! -f \"${bundled_model}\" ] || [ \"${source_model}\" -nt \"${bundled_model}\" ]; }; then\n    if [ -f \"${bundled_model}\" ] || [ -L \"${bundled_model}\" ]; then\n        /bin/unlink \"${bundled_model}\"\n    fi\n    /bin/cp -cL \"${source_model}\" \"${bundled_model}\"\nfi\n";
+		};
+		C3000002301D0000001425BE /* Prepare Platform Model Resource */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/ModelAssets/Qwen3-ASR-1.7B-MLX-5bit/model.safetensors",
+				"/Volumes/FENNY/XcodeBuilds/qwen3asr/ModelAssets/Qwen3-ASR-1.7B-MLX-5bit/model.safetensors",
+			);
+			name = "Prepare Platform Model Resource";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/Qwen3-ASR-1.7B-MLX-5bit/model.safetensors",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "source_model=\"${SRCROOT}/ModelAssets/Qwen3-ASR-1.7B-MLX-5bit/model.safetensors\"\nbundled_model=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/Qwen3-ASR-1.7B-MLX-5bit/model.safetensors\"\nif [ \"${PLATFORM_NAME}\" = \"iphonesimulator\" ]; then\n    if [ -f \"${bundled_model}\" ] || [ -L \"${bundled_model}\" ]; then\n        /bin/unlink \"${bundled_model}\"\n    fi\nelif [ \"${PLATFORM_NAME}\" = \"iphoneos\" ] && { [ -L \"${bundled_model}\" ] || [ ! -f \"${bundled_model}\" ] || [ \"${source_model}\" -nt \"${bundled_model}\" ]; }; then\n    if [ -f \"${bundled_model}\" ] || [ -L \"${bundled_model}\" ]; then\n        /bin/unlink \"${bundled_model}\"\n    fi\n    /bin/cp -cL \"${source_model}\" \"${bundled_model}\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		7B5F7360301CEAF7001425BE /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -497,6 +546,7 @@
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = model.safetensors;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -561,6 +611,7 @@
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = model.safetensors;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -591,7 +642,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "qwen3asr-Info.plist";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "需要在后台保持麦克风输入，以便语音键盘连续响应；未点击语音按钮时不会保存音频。";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "需要保持麦克风输入，以便在 iPad 分屏中连续响应语音键盘；未点击语音按钮时不会保存音频。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -628,7 +679,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "qwen3asr-Info.plist";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "需要在后台保持麦克风输入，以便语音键盘连续响应；未点击语音按钮时不会保存音频。";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "需要保持麦克风输入，以便在 iPad 分屏中连续响应语音键盘；未点击语音按钮时不会保存音频。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

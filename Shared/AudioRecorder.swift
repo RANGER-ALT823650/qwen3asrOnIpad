@@ -17,7 +17,7 @@ public class AudioRecorder: NSObject, ObservableObject {
     @Published public var isRecording = false
     @Published public var audioPower: Float = 0.0
     /// True while the app owns an active input audio unit but discards frames.
-    /// This keeps the background-audio process alive between dictation rounds
+    /// This keeps the input graph warm between split-screen dictation rounds
     /// without writing ambient audio to disk.
     @Published public private(set) var isMicrophoneWarm = false
     /// Last concrete failure reason, so the UI can show something actionable.
@@ -80,7 +80,7 @@ public class AudioRecorder: NSObject, ObservableObject {
             return true
         }
         guard AVAudioSession.sharedInstance().recordPermission == .granted else {
-            lastError = "麦克风权限未生效，请在 iPhone 设置中允许 qwen3asr 访问麦克风后重试"
+            lastError = "麦克风权限未生效，请在 iPad 设置中允许千问3 ASR访问麦克风后重试"
             return false
         }
 
@@ -90,7 +90,7 @@ public class AudioRecorder: NSObject, ObservableObject {
             lastError = nil
             return true
         } catch {
-            lastError = "后台麦克风保持失败: \(error.localizedDescription)"
+            lastError = "常驻麦克风保持失败: \(error.localizedDescription)"
             print("Failed to keep microphone input active: \(error)")
             return false
         }
@@ -105,11 +105,11 @@ public class AudioRecorder: NSObject, ObservableObject {
 
     public func startRecording() -> URL? {
         guard AVAudioSession.sharedInstance().recordPermission == .granted else {
-            lastError = "麦克风权限未生效，请在 iPhone 设置中允许 qwen3asr 访问麦克风后重试"
+            lastError = "麦克风权限未生效，请在 iPad 设置中允许千问3 ASR访问麦克风后重试"
             return nil
         }
         guard persistentInputEngine.isRunning, let captureFormat else {
-            lastError = "后台麦克风服务已停止，请打开 qwen3asr 恢复后再录音"
+            lastError = "常驻麦克风服务已停止，请保持千问3 ASR在分屏前台后重试"
             return nil
         }
 

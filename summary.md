@@ -1,4 +1,12 @@
-2026-08-03 15:21:08 CST
+2026-08-05 CST
+
+# 当前：iPad 分屏常驻链路修复
+
+- 已从当前 `codex/qwen-ipad` 分支移除识别完成和录音启动后的两处 `UIApplication.suspend`，模型 App 不再主动退出分屏。
+- 停止录音只发 Darwin 通知，不再通过 `qwen3asr://stop` 打开模型 App；分屏中的主 App 原地推理并回传文字。
+- 开始录音按 request ID 等待主 App 确认，未确认时先重发一次 Darwin 通知，之后才允许使用 record URL 做冷启动兜底。
+- 若结果到达时日记键盘暂时不可见，结果保留在 App Group，等真实键盘重新显示后再插入，避免第二轮文字丢失。
+- 前台判断同时接受 `foregroundActive` 和 `foregroundInactive`，适配日记 App 持有键盘焦点时的 iPad 分屏状态。
 
 # 语音键盘冷启动与转写修复摘要
 
@@ -25,7 +33,7 @@
 
 ## 修改时需要谨慎
 
-- `openContainingApp` 和自动 suspend 都使用私有行为，只适合侧载，不能视为 App Store 可用接口；不要重新引入三参数 `openURL:options:completionHandler:`。
+- `openContainingApp` 仍是仅用于开始阶段冷启动的侧载兜底；自动 suspend 已移除，不要重新引入，也不要恢复三参数 `openURL:options:completionHandler:`。
 - `AppGroupBridge.RecordStatus`、键盘状态处理和 AppRecordController 必须同步修改。
 - 不要把 Whisper 推理重新放回键盘扩展；扩展内存和生命周期不足以稳定承载模型。
 - 不要恢复对 Data slice 的零起始下标假设，也不要假定 WAV data chunk 的声明长度一定已回写。
@@ -34,7 +42,7 @@
 
 - 主 App 与键盘扩展继续共享 `group.project.qwen3asr`。
 - iOS 仍可能拒绝键盘私有 URL 桥接；此时只能显示明确错误并让用户手动打开主 App。
-- 后台推理受 iOS 后台执行时间限制；超时会发布可恢复的错误，而不是无限转圈。
+- 当前模型推理要求千问3 ASR仍在 iPad 分屏前台；离开分屏时会保留待处理 WAV，并等待 App 回到可见前台。
 
 ## 建议的下一步
 

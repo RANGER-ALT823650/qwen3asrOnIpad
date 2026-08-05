@@ -32,7 +32,7 @@
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>需要在后台保持麦克风输入，以便语音键盘连续响应；未点击语音按钮时不会保存音频。</string>
+	<string>需要保持麦克风输入，以便在 iPad 分屏中连续响应语音键盘；未点击语音按钮时不会保存音频。</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

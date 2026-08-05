@@ -16,6 +16,7 @@ public enum AppGroupBridge {
         public static let updatedAt = "statusUpdatedAt"
         public static let keyboardActiveAt = "keyboardActiveAt"
         public static let requestID = "recordRequestID"
+        public static let acknowledgedRequestID = "acknowledgedRecordRequestID"
         public static let transcriptionLaunchID = "transcriptionLaunchID"
         public static let transcriptionStartedAt = "transcriptionStartedAt"
     }
@@ -48,6 +49,7 @@ public enum AppGroupBridge {
         defaults.set(requestID, forKey: Keys.requestID)
         defaults.set(RecordStatus.requested.rawValue, forKey: Keys.status)
         defaults.set(Date().timeIntervalSince1970, forKey: Keys.updatedAt)
+        defaults.removeObject(forKey: Keys.acknowledgedRequestID)
         defaults.removeObject(forKey: Keys.wavPath)
         defaults.removeObject(forKey: Keys.transcriptionText)
         defaults.removeObject(forKey: Keys.message)
@@ -55,6 +57,27 @@ public enum AppGroupBridge {
         defaults.removeObject(forKey: Keys.transcriptionStartedAt)
         defaults.synchronize()
         return requestID
+    }
+
+    /// Confirms that the resident container process received this exact round.
+    /// Recording setup may take longer than the keyboard's fallback delay, so
+    /// acknowledgement is tracked separately from the `.recording` status.
+    @discardableResult
+    public static func acknowledgeRecordingRequest(_ requestID: String) -> Bool {
+        guard let defaults,
+              defaults.string(forKey: Keys.requestID) == requestID,
+              defaults.string(forKey: Keys.status) == RecordStatus.requested.rawValue else {
+            return false
+        }
+        defaults.set(requestID, forKey: Keys.acknowledgedRequestID)
+        defaults.set(Date().timeIntervalSince1970, forKey: Keys.updatedAt)
+        defaults.set("模型 App 已响应，正在启动录音…", forKey: Keys.message)
+        defaults.synchronize()
+        return true
+    }
+
+    public static func hasAcknowledgedRecordingRequest(_ requestID: String) -> Bool {
+        defaults?.string(forKey: Keys.acknowledgedRequestID) == requestID
     }
 
     public static func setStatus(_ status: RecordStatus, message: String? = nil, wavPath: String? = nil) {
@@ -78,6 +101,7 @@ public enum AppGroupBridge {
         }
         if status == .idle {
             defaults.removeObject(forKey: Keys.requestID)
+            defaults.removeObject(forKey: Keys.acknowledgedRequestID)
             defaults.removeObject(forKey: Keys.transcriptionLaunchID)
             defaults.removeObject(forKey: Keys.transcriptionStartedAt)
         } else if status == .requested {
@@ -188,6 +212,7 @@ public enum AppGroupBridge {
         defaults?.removeObject(forKey: Keys.transcriptionText)
         defaults?.removeObject(forKey: Keys.message)
         defaults?.removeObject(forKey: Keys.requestID)
+        defaults?.removeObject(forKey: Keys.acknowledgedRequestID)
         defaults?.removeObject(forKey: Keys.transcriptionLaunchID)
         defaults?.removeObject(forKey: Keys.transcriptionStartedAt)
     }

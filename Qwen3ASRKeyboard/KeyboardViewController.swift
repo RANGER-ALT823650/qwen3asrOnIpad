@@ -72,6 +72,7 @@ extension UIInputViewController {
 class KeyboardViewController: UIInputViewController {
     private var hostingController: UIHostingController<KeyboardView>?
     private var keyboardHeightConstraint: NSLayoutConstraint?
+    private(set) var isKeyboardVisible = false
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -101,7 +102,13 @@ class KeyboardViewController: UIInputViewController {
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        isKeyboardVisible = true
         updateNormalKeyboardHeight()
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        isKeyboardVisible = false
+        super.viewWillDisappear(animated)
     }
 
     override func viewWillTransition(
@@ -137,10 +144,6 @@ class KeyboardViewController: UIInputViewController {
         }
         let isLandscape = view.window?.windowScene?.interfaceOrientation.isLandscape == true
         return isLandscape ? 200 : 260
-    }
-
-    override func viewWillDisappear(_ animated: Bool) {
-        super.viewWillDisappear(animated)
     }
 
     /// This keyboard supplies its own dictation control. Tell iOS not to add

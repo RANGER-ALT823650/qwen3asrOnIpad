@@ -5,9 +5,9 @@ import Foundation
 public enum DarwinNotifications {
     /// Posted by the app whenever the shared record status changes.
     public static let statusChanged = "com.project.qwen3asr.statusChanged" as CFString
-    /// Posted by the keyboard to ask the (possibly backgrounded) app to start recording.
+    /// Posted by the keyboard to ask the split-screen companion app to start recording.
     public static let startRecording = "com.project.qwen3asr.startRecording" as CFString
-    /// Posted by the keyboard to ask the app to stop recording and publish the WAV.
+    /// Posted by the keyboard to ask the split-screen companion app to stop and transcribe.
     public static let stopRecording = "com.project.qwen3asr.stopRecording" as CFString
     /// Posted by the keyboard to ask the app to stop and discard the recording.
     public static let cancelRecording = "com.project.qwen3asr.cancelRecording" as CFString

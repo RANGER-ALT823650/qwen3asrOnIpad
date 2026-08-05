@@ -9,13 +9,13 @@ import OSLog
 /// The keyboard extension cannot reliably own microphone input inside its
 /// sandbox, so recording happens here instead:
 ///
-/// 1. The keyboard taps the voice button and opens `qwen3asr://record`.
-/// 2. We request microphone access, start recording into the App Group
-///    container, then background the app so the user lands back on the
-///    keyboard (which shows the live recording state).
-/// 3. When the keyboard taps stop it posts a Darwin notification and opens this
-///    app for the resident Qwen3-ASR Metal pass. We publish the result through
-///    the App Group, then suspend back to the originating app and keyboard.
+/// 1. The keyboard posts a Darwin notification while this app remains beside
+///    the diary app in iPad split screen.
+/// 2. We record into the App Group container without changing either app's
+///    foreground placement.
+/// 3. A second Darwin notification stops recording; this still-visible app runs
+///    Qwen inference and publishes text back to the existing diary keyboard.
+///    The record URL is only a cold-start fallback when no process responds.
 @MainActor
 final class AppRecordController: ObservableObject {
     static let shared = AppRecordController()
@@ -34,7 +34,6 @@ final class AppRecordController: ObservableObject {
     @Published private(set) var isTranscribing = false
     private var isStoppingRecording = false
     private var activeRequestID: String?
-    private var shouldReturnToKeyboardAfterTranscription = false
     /// Unique to this concrete app process. Persisted transcriptions owned by
     /// another launch are remnants of a force-quit or jetsam termination.
     private let launchID = UUID().uuidString
@@ -47,9 +46,8 @@ final class AppRecordController: ObservableObject {
         recoverStaleRecordState()
         resumeRequestedRecordingIfNeeded()
 
-        // Do not materialize the 2.3 GB model during the initial URL hand-off.
-        // Loading begins only after the user stops recording, once this app has
-        // already returned control to the originating keyboard.
+        // Keep the recording handshake light. The 2.3 GB model is materialized
+        // only after the user stops, while both split-screen apps stay in place.
     }
 
     // MARK: - URL entry point
@@ -80,9 +78,12 @@ final class AppRecordController: ObservableObject {
     /// It also makes manually opening the app complete the pending action.
     private func resumeRequestedRecordingIfNeeded() {
         guard AppGroupBridge.status == .requested,
-              AppGroupBridge.statusAge < 30 else { return }
+              AppGroupBridge.statusAge < 30,
+              let requestID = AppGroupBridge.currentRequestID else { return }
 
         logger.info("Taking over pending keyboard request during app launch")
+        _ = AppGroupBridge.acknowledgeRecordingRequest(requestID)
+        DarwinNotifications.post(DarwinNotifications.statusChanged)
         openedViaRecordURL = true
         Task { @MainActor in
             AppRecordController.shared.startRecordingFlow()
@@ -96,41 +97,27 @@ final class AppRecordController: ObservableObject {
         case "record":
             logger.info("Received record URL handoff")
             openedViaRecordURL = true
-            startRecordingFlow()
-        case "stop":
-            logger.info("Received foreground transcription URL handoff")
-            openedViaRecordURL = false
-            shouldReturnToKeyboardAfterTranscription = true
-
-            if AudioRecorder.shared.isRecording {
-                stopRecordingFlow(publishWAV: true)
-            } else if isTranscribing {
-                return
-            } else if AppGroupBridge.status == .transcribing {
-                resumeOwnedTranscriptionIfNeeded()
-            } else {
-                let detail = "录音进程已被系统结束，请返回键盘重新录音"
-                lastMessage = detail
-                AppGroupBridge.setStatus(.error, message: detail)
+            if let requestID = AppGroupBridge.currentRequestID {
+                _ = AppGroupBridge.acknowledgeRecordingRequest(requestID)
                 DarwinNotifications.post(DarwinNotifications.statusChanged)
-                returnToKeyboardAfterTranscriptionIfNeeded()
             }
+            startRecordingFlow()
         default:
             break
         }
     }
 
     /// The containing app calls this once after its launch-time microphone
-    /// permission flow. Keeping a discard-only input unit active prevents iOS
-    /// from suspending the process between keyboard dictation rounds.
+    /// permission flow. Keeping a discard-only input unit warm makes repeated
+    /// split-screen dictation rounds start without rebuilding the audio graph.
     func preparePersistentRuntime(permissionGranted: Bool) {
         guard permissionGranted else { return }
 
         if AudioRecorder.shared.startPersistentInput() {
-            logger.info("Persistent background microphone input is active")
+            logger.info("Persistent microphone input is active")
             lastMessage = ""
         } else {
-            let detail = AudioRecorder.shared.lastError ?? "后台麦克风启动失败"
+            let detail = AudioRecorder.shared.lastError ?? "常驻麦克风启动失败"
             logger.error("Persistent input failed: \(detail, privacy: .public)")
             lastMessage = detail
         }
@@ -165,13 +152,13 @@ final class AppRecordController: ObservableObject {
             logger.error("Microphone permission denied")
             isRecording = false
             lastMessage = "麦克风权限被拒绝，请在设置中允许"
-            AppGroupBridge.setStatus(.micDenied, message: "麦克风权限被拒绝，请在 iPhone 设置中允许 qwen3asr 访问麦克风")
+            AppGroupBridge.setStatus(.micDenied, message: "麦克风权限被拒绝，请在 iPad 设置中允许千问3 ASR访问麦克风")
             DarwinNotifications.post(DarwinNotifications.statusChanged)
             return
         }
         if !AudioRecorder.shared.isPersistentInputRunning {
-            guard UIApplication.shared.applicationState == .active else {
-                let detail = "后台麦克风服务已停止，请打开 qwen3asr 恢复后再录音"
+            guard isAppVisibleInForeground else {
+                let detail = "模型 App 当前不在前台，请先将千问3 ASR与日记 App 分屏显示"
                 isRecording = false
                 lastMessage = detail
                 AppGroupBridge.setStatus(.error, message: detail)
@@ -179,7 +166,7 @@ final class AppRecordController: ObservableObject {
                 return
             }
             guard AudioRecorder.shared.startPersistentInput() else {
-                let detail = AudioRecorder.shared.lastError ?? "后台麦克风启动失败"
+                let detail = AudioRecorder.shared.lastError ?? "常驻麦克风启动失败"
                 isRecording = false
                 lastMessage = detail
                 AppGroupBridge.setStatus(.error, message: detail)
@@ -206,9 +193,9 @@ final class AppRecordController: ObservableObject {
         keyboardPresenceGraceUntil = openedViaRecordURL
             ? Date().addingTimeInterval(6)
             : nil
+        openedViaRecordURL = false
         scheduleAutoStop()
         scheduleKeyboardPresenceCheck()
-        scheduleAutoBackground()
     }
 
     /// Stops the recorder. When `publishWAV` is true, the host app performs
@@ -241,14 +228,13 @@ final class AppRecordController: ObservableObject {
                             AppRecordController.shared.lastMessage = detail
                             AppGroupBridge.setStatus(.error, message: detail)
                             DarwinNotifications.post(DarwinNotifications.statusChanged)
-                            AppRecordController.shared.returnToKeyboardAfterTranscriptionIfNeeded()
                             return
                         }
                         print("AppRecordController: 进入宿主 App 转写: \(url.path)")
                         guard AppGroupBridge.markTranscribing(
                             requestID: requestID,
                             launchID: AppRecordController.shared.launchID,
-                            message: "等待 qwen3asr 前台识别…",
+                            message: "正在分屏前台识别…",
                             wavPath: url.path
                         ) else {
                             try? FileManager.default.removeItem(at: url)
@@ -261,7 +247,6 @@ final class AppRecordController: ObservableObject {
                         AppRecordController.shared.lastMessage = detail
                         AppGroupBridge.setStatus(.error, message: detail)
                         DarwinNotifications.post(DarwinNotifications.statusChanged)
-                        AppRecordController.shared.returnToKeyboardAfterTranscriptionIfNeeded()
                     }
                 } else {
                     if let errorMessage {
@@ -283,11 +268,16 @@ final class AppRecordController: ObservableObject {
     }
 
     private func transcribe(url: URL, requestID: String) {
-        // iOS 27 kills sustained CPU inference in a non-frontmost process and
-        // rejects this MLX Metal pass in the background. Leave the WAV pending
-        // only for this same live process to resume when it becomes active.
-        guard UIApplication.shared.applicationState == .active else {
-            logger.info("Deferring Qwen3-ASR inference until the container is foreground")
+        // The diary scene may own keyboard focus while this split-screen scene
+        // is foreground-inactive. It is still on screen and may run the MLX pass.
+        guard isAppVisibleInForeground else {
+            logger.info("Deferring Qwen3-ASR inference until the container is visible")
+            AppGroupBridge.setStatus(
+                .transcribing,
+                message: "等待千问3 ASR回到 iPad 分屏前台…",
+                wavPath: url.path
+            )
+            DarwinNotifications.post(DarwinNotifications.statusChanged)
             return
         }
         guard !isTranscribing else { return }
@@ -327,7 +317,6 @@ final class AppRecordController: ObservableObject {
             defer {
                 AppRecordController.shared.isTranscribing = false
                 AppRecordController.shared.endTranscriptionBackgroundTask()
-                AppRecordController.shared.returnToKeyboardAfterTranscriptionIfNeeded()
             }
 
             do {
@@ -403,7 +392,7 @@ final class AppRecordController: ObservableObject {
     /// 32-second auto-stop finishes just before the keyboard foregrounds us.
     /// A new process has a different launch ID and discards the WAV instead.
     private func resumeOwnedTranscriptionIfNeeded() {
-        guard UIApplication.shared.applicationState == .active,
+        guard isAppVisibleInForeground,
               AppGroupBridge.status == .transcribing,
               AppGroupBridge.currentTranscriptionLaunchID == launchID,
               let requestID = AppGroupBridge.currentRequestID,
@@ -437,18 +426,16 @@ final class AppRecordController: ObservableObject {
         transcriptionBackgroundTask = .invalid
     }
 
-    /// The stop URL temporarily foregrounds this app because iOS 27 cannot run
-    /// the 1.7B model reliably as a non-frontmost process. Once the shared state
-    /// contains text or a concrete error, reveal the originating keyboard.
-    private func returnToKeyboardAfterTranscriptionIfNeeded() {
-        guard shouldReturnToKeyboardAfterTranscription else { return }
-        shouldReturnToKeyboardAfterTranscription = false
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-            guard UIApplication.shared.applicationState == .active else { return }
-            let suspendSelector = NSSelectorFromString("suspend")
-            guard UIApplication.shared.responds(to: suspendSelector) else { return }
-            UIApplication.shared.perform(suspendSelector)
+    /// When keyboard focus belongs to the diary app, this split-screen scene can
+    /// be foreground-inactive even though it remains fully visible.
+    private var isAppVisibleInForeground: Bool {
+        let scenes = UIApplication.shared.connectedScenes
+        if scenes.isEmpty {
+            return UIApplication.shared.applicationState != .background
+        }
+        return scenes.contains {
+            $0.activationState == .foregroundActive
+                || $0.activationState == .foregroundInactive
         }
     }
 
@@ -490,40 +477,14 @@ final class AppRecordController: ObservableObject {
         }
     }
 
-    /// Return to the keyboard after the container app has taken ownership of
-    /// the microphone. The persistent input unit keeps the app eligible for
-    /// background audio execution and leaves the resident model available for
-    /// the next recording round.
-    ///
-    /// This selector is intentionally limited to the sideloaded keyboard hand
-    /// off flow. It is not used for ordinary app launches.
-    private func scheduleAutoBackground() {
-        guard openedViaRecordURL else { return }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
-            guard let self,
-                  self.isRecording,
-                  AppGroupBridge.status == .recording,
-                  UIApplication.shared.applicationState == .active else { return }
-
-            // There is no public API for an app to return the foreground to a
-            // keyboard extension. This is the same system suspend action used
-            // by the original sideload workflow; the model is not freed.
-            let suspendSelector = NSSelectorFromString("suspend")
-            guard UIApplication.shared.responds(to: suspendSelector) else {
-                self.logger.error("UIApplication no longer exposes the sideload suspend selector")
-                return
-            }
-            UIApplication.shared.perform(suspendSelector)
-            self.openedViaRecordURL = false
-        }
-    }
-
     // MARK: - Cross-process commands
 
     private func observeDarwinCommands() {
         DarwinNotifications.observe(DarwinNotifications.startRecording) {
             Task { @MainActor in
+                guard let requestID = AppGroupBridge.currentRequestID,
+                      AppGroupBridge.acknowledgeRecordingRequest(requestID) else { return }
+                DarwinNotifications.post(DarwinNotifications.statusChanged)
                 AppRecordController.shared.startRecordingFlow()
             }
         }
