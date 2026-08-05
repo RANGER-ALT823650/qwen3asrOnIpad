@@ -7,12 +7,16 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		3A9B1002301CF000001425BE /* Vendor/build-apple/whisper.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3A9B1001301CF000001425BE /* Vendor/build-apple/whisper.xcframework */; };
-		3A9B1003301CF000001425BE /* Vendor/build-apple/whisper.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 3A9B1001301CF000001425BE /* Vendor/build-apple/whisper.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		3A9B1005301CF000001425BE /* Vendor/build-apple/whisper.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3A9B1001301CF000001425BE /* Vendor/build-apple/whisper.xcframework */; };
-		3A9B1006301CF000001425BE /* Vendor/build-apple/whisper.xcframework in App Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 3A9B1001301CF000001425BE /* Vendor/build-apple/whisper.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		3A9B1007301CF000001425BE /* Qwen3ASRKeyboard/Models/ggml-base-q5_1.bin in Resources */ = {isa = PBXBuildFile; fileRef = 3A9B1008301CF000001425BE /* Qwen3ASRKeyboard/Models/ggml-base-q5_1.bin */; };
 		7B5F739C301CEAF8001425BE /* Qwen3ASRKeyboard.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 7B5F7391301CEAF8001425BE /* Qwen3ASRKeyboard.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A1000015301D0000001425BE /* Qwen3ASR in Frameworks */ = {isa = PBXBuildFile; productRef = A1000012301D0000001425BE /* Qwen3ASR */; };
+		A1000016301D0000001425BE /* AudioCommon in Frameworks */ = {isa = PBXBuildFile; productRef = A1000013301D0000001425BE /* AudioCommon */; };
+		A1000017301D0000001425BE /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = A1000014301D0000001425BE /* MLX */; };
+		A100001C301D0000001425BE /* Qwen3-ASR-1.7B-MLX-5bit in Resources */ = {isa = PBXBuildFile; fileRef = A100001A301D0000001425BE /* Qwen3-ASR-1.7B-MLX-5bit */; };
+		B2000001301D0000001425BE /* Qwen3ASR in Frameworks */ = {isa = PBXBuildFile; productRef = B2000008301D0000001425BE /* Qwen3ASR */; };
+		B2000002301D0000001425BE /* AudioCommon in Frameworks */ = {isa = PBXBuildFile; productRef = B2000009301D0000001425BE /* AudioCommon */; };
+		B2000003301D0000001425BE /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = B200000A301D0000001425BE /* MLX */; };
+		B2000005301D0000001425BE /* Qwen3-ASR-1.7B-MLX-5bit in Resources */ = {isa = PBXBuildFile; fileRef = A100001A301D0000001425BE /* Qwen3-ASR-1.7B-MLX-5bit */; };
+		B2000006301D0000001425BE /* qwen3asr/HybridQwen3ASREngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000007301D0000001425BE /* qwen3asr/HybridQwen3ASREngine.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -40,28 +44,6 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		3A9B1004301CF000001425BE /* Embed Frameworks */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 10;
-			files = (
-				3A9B1003301CF000001425BE /* Vendor/build-apple/whisper.xcframework in Embed Frameworks */,
-			);
-			name = "Embed Frameworks";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		3A9B1009301CF000001425BE /* App Embed Frameworks */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 10;
-			files = (
-				3A9B1006301CF000001425BE /* Vendor/build-apple/whisper.xcframework in App Embed Frameworks */,
-			);
-			name = "App Embed Frameworks";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		7B5F739B301CEAF8001425BE /* Embed App Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -76,12 +58,13 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		3A9B1001301CF000001425BE /* Vendor/build-apple/whisper.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = "Vendor/build-apple/whisper.xcframework"; sourceTree = "<group>"; };
-		3A9B1008301CF000001425BE /* Qwen3ASRKeyboard/Models/ggml-base-q5_1.bin */ = {isa = PBXFileReference; lastKnownFileType = archive.macbinary; path = "Qwen3ASRKeyboard/Models/ggml-base-q5_1.bin"; sourceTree = "<group>"; };
 		7B5F7364301CEAF7001425BE /* qwen3asr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = qwen3asr.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7B5F7371301CEAF8001425BE /* qwen3asrTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = qwen3asrTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		7B5F737B301CEAF8001425BE /* qwen3asrUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = qwen3asrUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		7B5F7391301CEAF8001425BE /* Qwen3ASRKeyboard.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = Qwen3ASRKeyboard.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1000001301D0000001425BE /* Qwen3ASRLab.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Qwen3ASRLab.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A100001A301D0000001425BE /* Qwen3-ASR-1.7B-MLX-5bit */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "Qwen3-ASR-1.7B-MLX-5bit"; sourceTree = "<group>"; };
+		B2000007301D0000001425BE /* qwen3asr/HybridQwen3ASREngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = qwen3asr/HybridQwen3ASREngine.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -110,6 +93,11 @@
 			path = Shared;
 			sourceTree = "<group>";
 		};
+		A1000002301D0000001425BE /* Qwen3ASRLab */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Qwen3ASRLab;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -117,7 +105,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				3A9B1005301CF000001425BE /* Vendor/build-apple/whisper.xcframework in Frameworks */,
+				B2000001301D0000001425BE /* Qwen3ASR in Frameworks */,
+				B2000002301D0000001425BE /* AudioCommon in Frameworks */,
+				B2000003301D0000001425BE /* MLX in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -139,7 +129,16 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				3A9B1002301CF000001425BE /* Vendor/build-apple/whisper.xcframework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1000005301D0000001425BE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1000015301D0000001425BE /* Qwen3ASR in Frameworks */,
+				A1000016301D0000001425BE /* AudioCommon in Frameworks */,
+				A1000017301D0000001425BE /* MLX in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -150,12 +149,13 @@
 			isa = PBXGroup;
 			children = (
 				7B5F7366301CEAF7001425BE /* qwen3asr */,
+				A1000002301D0000001425BE /* Qwen3ASRLab */,
 				7B5F7390301CEAF8001425BE /* Qwen3ASRKeyboard */,
 				7B5F739D301CEAF8001425BE /* Shared */,
+				A1000018301D0000001425BE /* ModelAssets */,
+				B2000007301D0000001425BE /* qwen3asr/HybridQwen3ASREngine.swift */,
 				7B5F7374301CEAF8001425BE /* qwen3asrTests */,
 				7B5F737E301CEAF8001425BE /* qwen3asrUITests */,
-				3A9B1001301CF000001425BE /* Vendor/build-apple/whisper.xcframework */,
-				3A9B1008301CF000001425BE /* Qwen3ASRKeyboard/Models/ggml-base-q5_1.bin */,
 				7B5F7365301CEAF8001425BE /* Products */,
 			);
 			sourceTree = "<group>";
@@ -164,11 +164,20 @@
 			isa = PBXGroup;
 			children = (
 				7B5F7364301CEAF7001425BE /* qwen3asr.app */,
+				A1000001301D0000001425BE /* Qwen3ASRLab.app */,
 				7B5F7391301CEAF8001425BE /* Qwen3ASRKeyboard.appex */,
 				7B5F7371301CEAF8001425BE /* qwen3asrTests.xctest */,
 				7B5F737B301CEAF8001425BE /* qwen3asrUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		A1000018301D0000001425BE /* ModelAssets */ = {
+			isa = PBXGroup;
+			children = (
+				A100001A301D0000001425BE /* Qwen3-ASR-1.7B-MLX-5bit */,
+			);
+			path = ModelAssets;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -182,7 +191,6 @@
 				7B5F7361301CEAF7001425BE /* Frameworks */,
 				7B5F7362301CEAF7001425BE /* Resources */,
 				7B5F739B301CEAF8001425BE /* Embed App Extensions */,
-				3A9B1009301CF000001425BE /* App Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -195,6 +203,9 @@
 			);
 			name = qwen3asr;
 			packageProductDependencies = (
+				B2000008301D0000001425BE /* Qwen3ASR */,
+				B2000009301D0000001425BE /* AudioCommon */,
+				B200000A301D0000001425BE /* MLX */,
 			);
 			productName = qwen3asr;
 			productReference = 7B5F7364301CEAF7001425BE /* qwen3asr.app */;
@@ -252,7 +263,6 @@
 			buildPhases = (
 				7B5F7393301CEAF8001425BE /* Sources */,
 				7B5F7394301CEAF8001425BE /* Frameworks */,
-				3A9B1004301CF000001425BE /* Embed Frameworks */,
 				7B5F7395301CEAF8001425BE /* Resources */,
 			);
 			buildRules = (
@@ -269,6 +279,31 @@
 			productName = Qwen3ASRKeyboard;
 			productReference = 7B5F7391301CEAF8001425BE /* Qwen3ASRKeyboard.appex */;
 			productType = "com.apple.product-type.app-extension";
+		};
+		A1000003301D0000001425BE /* Qwen3ASRLab */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1000009301D0000001425BE /* Build configuration list for PBXNativeTarget "Qwen3ASRLab" */;
+			buildPhases = (
+				A1000004301D0000001425BE /* Sources */,
+				A1000005301D0000001425BE /* Frameworks */,
+				A1000006301D0000001425BE /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A1000002301D0000001425BE /* Qwen3ASRLab */,
+			);
+			name = Qwen3ASRLab;
+			packageProductDependencies = (
+				A1000012301D0000001425BE /* Qwen3ASR */,
+				A1000013301D0000001425BE /* AudioCommon */,
+				A1000014301D0000001425BE /* MLX */,
+			);
+			productName = Qwen3ASRLab;
+			productReference = A1000001301D0000001425BE /* Qwen3ASRLab.app */;
+			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
@@ -294,6 +329,9 @@
 					7B5F7392301CEAF8001425BE = {
 						CreatedOnToolsVersion = 26.6;
 					};
+					A1000003301D0000001425BE = {
+						CreatedOnToolsVersion = 26.6;
+					};
 				};
 			};
 			buildConfigurationList = 7B5F735F301CEAF7001425BE /* Build configuration list for PBXProject "qwen3asr" */;
@@ -305,11 +343,16 @@
 			);
 			mainGroup = 7B5F735B301CEAF7001425BE;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				A1000010301D0000001425BE /* XCRemoteSwiftPackageReference "speech-swift" */,
+				A1000011301D0000001425BE /* XCRemoteSwiftPackageReference "mlx-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				7B5F7363301CEAF7001425BE /* qwen3asr */,
+				A1000003301D0000001425BE /* Qwen3ASRLab */,
 				7B5F7392301CEAF8001425BE /* Qwen3ASRKeyboard */,
 				7B5F7370301CEAF8001425BE /* qwen3asrTests */,
 				7B5F737A301CEAF8001425BE /* qwen3asrUITests */,
@@ -322,7 +365,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				3A9B1007301CF000001425BE /* Qwen3ASRKeyboard/Models/ggml-base-q5_1.bin in Resources */,
+				B2000005301D0000001425BE /* Qwen3-ASR-1.7B-MLX-5bit in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -344,6 +387,14 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1000006301D0000001425BE /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A100001C301D0000001425BE /* Qwen3-ASR-1.7B-MLX-5bit in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -375,6 +426,14 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1000004301D0000001425BE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B2000006301D0000001425BE /* qwen3asr/HybridQwen3ASREngine.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -527,7 +586,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = qwen3asr.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = ZT3X6444JT;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -538,12 +597,14 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = project.qwen3asr;
+				PRODUCT_MODULE_NAME = QwenKeyboardHost;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -562,7 +623,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = qwen3asr.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = ZT3X6444JT;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -573,12 +634,14 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = project.qwen3asr;
+				PRODUCT_MODULE_NAME = QwenKeyboardHost;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -598,7 +661,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZT3X6444JT;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = project.qwen3asrTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -620,7 +683,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZT3X6444JT;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = project.qwen3asrTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -679,7 +742,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Qwen3ASRKeyboard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = ZT3X6444JT;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "Qwen3ASRKeyboard-Info.plist";
@@ -688,7 +751,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = project.qwen3asr.Qwen3ASRKeyboard;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -706,7 +769,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Qwen3ASRKeyboard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = ZT3X6444JT;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "Qwen3ASRKeyboard-Info.plist";
@@ -715,13 +778,79 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = project.qwen3asr.Qwen3ASRKeyboard;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		A1000007301D0000001425BE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZT3X6444JT;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Qwen3ASR Lab";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "用于录制语音并在设备本地通过 Qwen3-ASR 完成转写。";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = project.qwen3asr.lab;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A1000008301D0000001425BE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZT3X6444JT;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Qwen3ASR Lab";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "用于录制语音并在设备本地通过 Qwen3-ASR 完成转写。";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = project.qwen3asr.lab;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -776,7 +905,68 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		A1000009301D0000001425BE /* Build configuration list for PBXNativeTarget "Qwen3ASRLab" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1000007301D0000001425BE /* Debug */,
+				A1000008301D0000001425BE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A1000010301D0000001425BE /* XCRemoteSwiftPackageReference "speech-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/soniqo/speech-swift.git";
+			requirement = {
+				kind = revision;
+				revision = 37c99dd856cfacfe952b2e48ecdb3c9dedc77625;
+			};
+		};
+		A1000011301D0000001425BE /* XCRemoteSwiftPackageReference "mlx-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.30.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A1000012301D0000001425BE /* Qwen3ASR */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A1000010301D0000001425BE /* XCRemoteSwiftPackageReference "speech-swift" */;
+			productName = Qwen3ASR;
+		};
+		A1000013301D0000001425BE /* AudioCommon */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A1000010301D0000001425BE /* XCRemoteSwiftPackageReference "speech-swift" */;
+			productName = AudioCommon;
+		};
+		A1000014301D0000001425BE /* MLX */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A1000011301D0000001425BE /* XCRemoteSwiftPackageReference "mlx-swift" */;
+			productName = MLX;
+		};
+		B2000008301D0000001425BE /* Qwen3ASR */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A1000010301D0000001425BE /* XCRemoteSwiftPackageReference "speech-swift" */;
+			productName = Qwen3ASR;
+		};
+		B2000009301D0000001425BE /* AudioCommon */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A1000010301D0000001425BE /* XCRemoteSwiftPackageReference "speech-swift" */;
+			productName = AudioCommon;
+		};
+		B200000A301D0000001425BE /* MLX */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A1000011301D0000001425BE /* XCRemoteSwiftPackageReference "mlx-swift" */;
+			productName = MLX;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 7B5F735C301CEAF7001425BE /* Project object */;
 }

@@ -18,7 +18,7 @@ struct ContentView: View {
                 .padding(.vertical, 20)
             }
             .background(Color(UIColor.systemGroupedBackground).ignoresSafeArea())
-            .navigationTitle("Whisper 语音输入法")
+            .navigationTitle("Qwen3-ASR 语音输入法")
             .navigationBarTitleDisplayMode(.inline)
         }
     }
@@ -42,6 +42,22 @@ struct ContentView: View {
                 }
                 .padding(14)
                 .background(Color.red.opacity(0.08))
+                .cornerRadius(12)
+            } else if recordController.isTranscribing {
+                HStack(spacing: 12) {
+                    ProgressView()
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Qwen3-ASR 正在本机识别…")
+                            .font(.subheadline)
+                            .fontWeight(.bold)
+                        Text("请保持本页在前台；完成后会自动返回键盘")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                }
+                .padding(14)
+                .background(Color.blue.opacity(0.08))
                 .cornerRadius(12)
             } else if audioRecorder.isMicrophoneWarm {
                 HStack(spacing: 12) {
@@ -99,7 +115,7 @@ struct ContentView: View {
                         .foregroundColor(.white)
                 }
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Whisper base 离线语音输入")
+                    Text("Qwen3-ASR 1.7B 离线语音输入")
                         .font(.title3)
                         .fontWeight(.bold)
                     Text("录音和识别都在 iPhone 本机完成")
@@ -133,10 +149,10 @@ struct ContentView: View {
                     .background(Color.green.opacity(0.12))
                     .cornerRadius(12)
             }
-            Text("已内置 Whisper base 多语言 Q5_1 量化模型。识别过程不上传音频、不依赖局域网，也不需要启动 Mac 服务。")
+            Text("已内置完整的 Qwen3-ASR 1.7B MLX 5-bit 模型，音频编码与文本解码复用同一份本地权重。识别过程不上传音频、不依赖局域网，也不需要启动 Mac 服务。")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
-            Label("运行时使用 whisper.cpp 的 Metal 后端加速", systemImage: "cpu")
+            Label("最长录音 \(Int(AppGroupBridge.maximumRecordingDuration)) 秒；CPU 安全加载，前台 Metal 推理", systemImage: "cpu")
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
@@ -158,7 +174,7 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 12) {
                 guideStepRow(step: "1", title: "添加键盘", desc: "设置 → 通用 → 键盘 → 键盘 → 添加新键盘 → qwen3asr 输入法")
                 guideStepRow(step: "2", title: "开启完全访问", desc: "进入 qwen3asr 输入法，开启「允许完全访问」，让键盘能使用本机录音与离线转写组件。")
-                guideStepRow(step: "3", title: "开始语音输入", desc: "在任意文本框切换到 qwen3asr 输入法，点击语音按钮即可原地录音；再次点击停止后，文字会直接插入当前输入框。")
+                guideStepRow(step: "3", title: "开始语音输入", desc: "在任意文本框切换到 qwen3asr 输入法，点击语音按钮即可原地录音；再次点击停止后会短暂打开本 App，识别完成后自动返回并插入文字。")
                 guideStepRow(step: "4", title: "麦克风权限", desc: "第一次点击语音按钮时，请在弹出的对话框中选择「允许」。若之前拒绝了，可在本页下方或 iPhone 设置中重新开启。")
             }
             Button(action: {

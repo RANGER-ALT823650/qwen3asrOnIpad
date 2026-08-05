@@ -6,9 +6,10 @@ public struct KeyboardView: View {
 
     @State private var recordStatus: AppGroupBridge.RecordStatus = .idle
     @State private var isTranscribing = false
-    @State private var statusText = "Whisper base 已就绪，点击说话"
-    @State private var isModelAvailable = WhisperTranscriber.isModelBundled
+    @State private var statusText = "Qwen3-ASR 1.7B 已就绪，点击说话"
+    @State private var recordingElapsed: TimeInterval = 0
     @State private var recordingAttemptID = UUID()
+    @State private var didRequestForegroundTranscription = false
 
     private let statusPoller = Timer.publish(every: 0.35, on: .main, in: .common).autoconnect()
 
@@ -21,15 +22,15 @@ public struct KeyboardView: View {
             HStack {
                 HStack(spacing: 6) {
                     Circle()
-                        .fill(isModelAvailable ? Color.green : Color.red)
+                        .fill(Color.green)
                         .frame(width: 7, height: 7)
-                    Text(isModelAvailable ? "Whisper base 本机离线" : "离线模型缺失")
+                    Text("Qwen3-ASR 1.7B 本机离线")
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(isModelAvailable ? .green : .red)
+                        .foregroundColor(.green)
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
-                .background((isModelAvailable ? Color.green : Color.red).opacity(0.12))
+                .background(Color.green.opacity(0.12))
                 .cornerRadius(10)
 
                 Spacer()
@@ -45,21 +46,54 @@ public struct KeyboardView: View {
             .padding(.top, 6)
 
             VStack(spacing: 4) {
-                if isTranscribing {
-                    HStack(spacing: 6) {
-                        ProgressView().scaleEffect(0.8)
-                        Text("Whisper 正在本机识别...")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(.blue)
+                if recordStatus == .recording {
+                    HStack(spacing: 8) {
+                        Text("录音中")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.red)
+                        ProgressView(
+                            value: recordingElapsed,
+                            total: AppGroupBridge.maximumRecordingDuration
+                        )
+                        .tint(.red)
+                        Text(recordingProgressText)
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal, 12)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("录音进度")
+                    .accessibilityValue(recordingProgressText)
+                } else if isTranscribing {
+                    VStack(spacing: 5) {
+                        HStack(spacing: 6) {
+                            ProgressView().scaleEffect(0.8)
+                            Text("Qwen3-ASR 正在本机识别…")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(.blue)
+                        }
+                        Text(statusText)
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
                     }
                 } else {
-                    Text(statusText)
-                        .font(.system(size: 13))
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
+                    ScrollView(.vertical, showsIndicators: recordStatus == .error) {
+                        Text(statusText)
+                            .font(.system(size: 12))
+                            .foregroundColor(statusForegroundColor)
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
             }
-            .frame(height: 24)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity)
+            .frame(height: 72)
+            .background(Color(UIColor.tertiarySystemFill))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .padding(.horizontal, 12)
 
             HStack(spacing: 12) {
                 // Do not read `needsInputModeSwitchKey` while SwiftUI is
@@ -100,9 +134,9 @@ public struct KeyboardView: View {
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color(UIColor.secondarySystemGroupedBackground).ignoresSafeArea())
         .onAppear {
-            isModelAvailable = WhisperTranscriber.isModelBundled
             AppGroupBridge.markKeyboardActive()
             observeSharedRecordStatus()
             refreshSharedRecordStatus()
@@ -137,7 +171,7 @@ public struct KeyboardView: View {
                 .foregroundColor(.white)
             }
         }
-        .disabled(isTranscribing || !isModelAvailable)
+        .disabled(isTranscribing)
         .accessibilityIdentifier("voiceInputButton")
         .accessibilityLabel(buttonTitle)
     }
@@ -148,6 +182,18 @@ public struct KeyboardView: View {
         case .requested: return .gray
         case .stopped, .transcribing, .completed: return .blue
         default: return .blue
+        }
+    }
+
+    private var statusForegroundColor: Color {
+        if statusText.hasPrefix("⚠️") {
+            return .orange
+        }
+        switch recordStatus {
+        case .error, .micDenied:
+            return .red
+        default:
+            return .secondary
         }
     }
 
@@ -185,10 +231,6 @@ public struct KeyboardView: View {
     /// even after the user grants microphone permission. The container app owns
     /// the audio session and reports progress through the shared App Group.
     private func startVoiceFlow() {
-        guard isModelAvailable else {
-            statusText = "未找到内置模型，请重新安装 App"
-            return
-        }
         guard controller?.hasFullAccess == true else {
             statusText = "请先在设置中为本键盘开启“允许完全访问”"
             return
@@ -196,7 +238,7 @@ public struct KeyboardView: View {
 
         recordStatus = .requested
         statusText = "正在启动录音…"
-        AppGroupBridge.setStatus(.requested)
+        AppGroupBridge.beginRequest()
 
         // If the container app still has a live process, this starts recording
         // without bringing it to the foreground.
@@ -254,8 +296,31 @@ public struct KeyboardView: View {
 
         recordStatus = .transcribing
         isTranscribing = true
-        statusText = "Whisper 正在本机识别..."
+        statusText = "正在打开 qwen3asr 前台识别…"
         DarwinNotifications.post(DarwinNotifications.stopRecording)
+        openContainerForForegroundTranscription()
+    }
+
+    /// iOS terminates a non-frontmost app when the 1.7B model sustains enough
+    /// CPU work, while MLX Metal is unavailable in the background. Foreground
+    /// the container for the model pass, then let it suspend back here after it
+    /// publishes either text or a concrete error through the App Group.
+    private func openContainerForForegroundTranscription() {
+        guard !didRequestForegroundTranscription else { return }
+        didRequestForegroundTranscription = true
+
+        guard let stopURL = URL(string: "qwen3asr://stop") else {
+            didRequestForegroundTranscription = false
+            statusText = "无法创建识别请求，请手动打开 qwen3asr"
+            return
+        }
+
+        controller?.openContainingApp(at: stopURL) { didOpen in
+            if !didOpen {
+                didRequestForegroundTranscription = false
+                statusText = "系统未允许打开 qwen3asr，请手动打开 App 完成识别"
+            }
+        }
     }
 
     private func observeSharedRecordStatus() {
@@ -268,9 +333,13 @@ public struct KeyboardView: View {
         switch AppGroupBridge.status {
         case .idle:
             guard !isTranscribing else { return }
+            didRequestForegroundTranscription = false
+            recordingElapsed = 0
             recordStatus = .idle
-            statusText = isModelAvailable ? "Whisper base 已就绪，点击说话" : "未找到内置模型，请重新安装 App"
+            statusText = AppGroupBridge.lastMessage
+                ?? "Qwen3-ASR 1.7B 已就绪，点击说话"
         case .requested:
+            recordingElapsed = 0
             guard AppGroupBridge.statusAge < 12 else {
                 isTranscribing = false
                 recordStatus = .error
@@ -281,39 +350,57 @@ public struct KeyboardView: View {
             recordStatus = .requested
             statusText = AppGroupBridge.lastMessage ?? "正在启动录音…"
         case .recording:
+            didRequestForegroundTranscription = false
             recordStatus = .recording
             isTranscribing = false
-            statusText = "🎙️ 正在录音… 点击停止"
+            recordingElapsed = min(
+                AppGroupBridge.statusAge,
+                AppGroupBridge.maximumRecordingDuration
+            )
+            statusText = "🎙️ 正在录音… 最长 \(Int(AppGroupBridge.maximumRecordingDuration)) 秒，点击停止"
         case .stopped, .transcribing:
-            guard AppGroupBridge.statusAge < 180 else {
-                isTranscribing = false
-                recordStatus = .error
-                statusText = "识别已超时，请打开 qwen3asr 后重新录音"
-                AppGroupBridge.setStatus(.error, message: statusText)
-                return
-            }
+            recordingElapsed = 0
             recordStatus = .transcribing
             isTranscribing = true
-            statusText = "Whisper 正在本机识别..."
+            statusText = AppGroupBridge.lastMessage ?? "Qwen3-ASR 正在本机识别…"
+            openContainerForForegroundTranscription()
         case .completed:
+            recordingElapsed = 0
             isTranscribing = false
+            didRequestForegroundTranscription = false
             recordStatus = .idle
             let text = AppGroupBridge.transcriptionText ?? ""
+            let warning = AppGroupBridge.lastMessage
             if text.isEmpty {
                 statusText = "未识别到文字，请重试"
             } else {
                 controller?.textDocumentProxy.insertText(text)
-                statusText = "已转写: \(text)"
+                statusText = warning ?? "已转写: \(text)"
             }
-            AppGroupBridge.setStatus(.idle)
+            // A repetition warning is informational: insert the complete text
+            // unchanged, then keep the warning visible until the next request.
+            AppGroupBridge.setStatus(.idle, message: warning)
         case .micDenied:
+            recordingElapsed = 0
             isTranscribing = false
+            didRequestForegroundTranscription = false
             recordStatus = .micDenied
             statusText = AppGroupBridge.lastMessage ?? "麦克风权限被拒绝，请在设置中允许 qwen3asr 访问麦克风"
         case .error:
+            recordingElapsed = 0
             isTranscribing = false
+            didRequestForegroundTranscription = false
             recordStatus = .error
             statusText = AppGroupBridge.lastMessage ?? "录音或识别失败，请重试"
         }
+    }
+
+    private var recordingProgressText: String {
+        let elapsed = min(recordingElapsed, AppGroupBridge.maximumRecordingDuration)
+        return String(
+            format: "%.1f / %.0f 秒",
+            elapsed,
+            AppGroupBridge.maximumRecordingDuration
+        )
     }
 }

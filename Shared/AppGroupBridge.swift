@@ -5,6 +5,8 @@ import Foundation
 public enum AppGroupBridge {
     public static let groupID = "group.project.qwen3asr"
     public static let suiteName = groupID
+    public static let maximumRecordingDuration: TimeInterval = 32
+    public static let maximumTranscriptionDuration: TimeInterval = 180
 
     public enum Keys {
         public static let status = "recordStatus"
@@ -13,6 +15,9 @@ public enum AppGroupBridge {
         public static let message = "statusMessage"
         public static let updatedAt = "statusUpdatedAt"
         public static let keyboardActiveAt = "keyboardActiveAt"
+        public static let requestID = "recordRequestID"
+        public static let transcriptionLaunchID = "transcriptionLaunchID"
+        public static let transcriptionStartedAt = "transcriptionStartedAt"
     }
 
     public enum RecordStatus: String {
@@ -30,12 +35,36 @@ public enum AppGroupBridge {
         UserDefaults(suiteName: suiteName)
     }
 
+    /// Starts a completely new keyboard round. The UUID travels with the WAV
+    /// and final text so a late result can never complete a newer request.
+    @discardableResult
+    public static func beginRequest() -> String {
+        let requestID = UUID().uuidString
+        guard let defaults else { return requestID }
+
+        if let stalePath = defaults.string(forKey: Keys.wavPath) {
+            try? FileManager.default.removeItem(at: URL(fileURLWithPath: stalePath))
+        }
+        defaults.set(requestID, forKey: Keys.requestID)
+        defaults.set(RecordStatus.requested.rawValue, forKey: Keys.status)
+        defaults.set(Date().timeIntervalSince1970, forKey: Keys.updatedAt)
+        defaults.removeObject(forKey: Keys.wavPath)
+        defaults.removeObject(forKey: Keys.transcriptionText)
+        defaults.removeObject(forKey: Keys.message)
+        defaults.removeObject(forKey: Keys.transcriptionLaunchID)
+        defaults.removeObject(forKey: Keys.transcriptionStartedAt)
+        defaults.synchronize()
+        return requestID
+    }
+
     public static func setStatus(_ status: RecordStatus, message: String? = nil, wavPath: String? = nil) {
         guard let defaults else { return }
         defaults.set(status.rawValue, forKey: Keys.status)
         defaults.set(Date().timeIntervalSince1970, forKey: Keys.updatedAt)
         if let message {
             defaults.set(message, forKey: Keys.message)
+        } else if status == .idle || status == .requested || status == .completed {
+            defaults.removeObject(forKey: Keys.message)
         }
         if let wavPath {
             defaults.set(wavPath, forKey: Keys.wavPath)
@@ -47,10 +76,41 @@ public enum AppGroupBridge {
             defaults.removeObject(forKey: Keys.wavPath)
             defaults.removeObject(forKey: Keys.transcriptionText)
         }
-        if status == .requested, message == nil {
-            defaults.removeObject(forKey: Keys.message)
+        if status == .idle {
+            defaults.removeObject(forKey: Keys.requestID)
+            defaults.removeObject(forKey: Keys.transcriptionLaunchID)
+            defaults.removeObject(forKey: Keys.transcriptionStartedAt)
+        } else if status == .requested {
+            defaults.removeObject(forKey: Keys.transcriptionLaunchID)
+            defaults.removeObject(forKey: Keys.transcriptionStartedAt)
         }
         defaults.synchronize()
+    }
+
+    /// Claims a transcription for this concrete app process. If the process is
+    /// later force-quit, the next launch sees a different launch ID and treats
+    /// the persisted WAV as interrupted work instead of automatically rerunning it.
+    @discardableResult
+    public static func markTranscribing(
+        requestID: String,
+        launchID: String,
+        message: String,
+        wavPath: String
+    ) -> Bool {
+        guard let defaults,
+              defaults.string(forKey: Keys.requestID) == requestID else {
+            return false
+        }
+        defaults.set(requestID, forKey: Keys.requestID)
+        defaults.set(launchID, forKey: Keys.transcriptionLaunchID)
+        defaults.set(Date().timeIntervalSince1970, forKey: Keys.transcriptionStartedAt)
+        defaults.set(RecordStatus.transcribing.rawValue, forKey: Keys.status)
+        defaults.set(Date().timeIntervalSince1970, forKey: Keys.updatedAt)
+        defaults.set(message, forKey: Keys.message)
+        defaults.set(wavPath, forKey: Keys.wavPath)
+        defaults.removeObject(forKey: Keys.transcriptionText)
+        defaults.synchronize()
+        return true
     }
 
     public static var status: RecordStatus {
@@ -66,11 +126,32 @@ public enum AppGroupBridge {
         defaults?.string(forKey: Keys.transcriptionText)
     }
 
-    public static func setTranscription(_ text: String) {
-        guard let defaults else { return }
+    @discardableResult
+    public static func setTranscription(_ text: String, for requestID: String) -> Bool {
+        guard let defaults,
+              defaults.string(forKey: Keys.requestID) == requestID else { return false }
         defaults.set(text, forKey: Keys.transcriptionText)
         defaults.set(Date().timeIntervalSince1970, forKey: Keys.updatedAt)
         defaults.synchronize()
+        return true
+    }
+
+    public static var currentRequestID: String? {
+        defaults?.string(forKey: Keys.requestID)
+    }
+
+    public static var currentTranscriptionLaunchID: String? {
+        defaults?.string(forKey: Keys.transcriptionLaunchID)
+    }
+
+    public static var transcriptionStartedAt: TimeInterval {
+        defaults?.double(forKey: Keys.transcriptionStartedAt) ?? 0
+    }
+
+    public static func ownsTranscription(requestID: String, launchID: String) -> Bool {
+        status == .transcribing
+            && currentRequestID == requestID
+            && currentTranscriptionLaunchID == launchID
     }
 
     public static var lastMessage: String? {
@@ -106,5 +187,8 @@ public enum AppGroupBridge {
         defaults?.removeObject(forKey: Keys.wavPath)
         defaults?.removeObject(forKey: Keys.transcriptionText)
         defaults?.removeObject(forKey: Keys.message)
+        defaults?.removeObject(forKey: Keys.requestID)
+        defaults?.removeObject(forKey: Keys.transcriptionLaunchID)
+        defaults?.removeObject(forKey: Keys.transcriptionStartedAt)
     }
 }

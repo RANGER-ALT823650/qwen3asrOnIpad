@@ -2,3 +2,6 @@
 build/
 *.xcodeproj/xcuserdata/
 *.xcodeproj/project.xcworkspace/xcuserdata/
+
+# Local Qwen model weights are bundled for device builds but are too large for Git.
+ModelAssets/**/*.safetensors

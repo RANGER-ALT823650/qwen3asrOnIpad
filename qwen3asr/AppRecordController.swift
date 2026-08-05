@@ -13,9 +13,9 @@ import OSLog
 /// 2. We request microphone access, start recording into the App Group
 ///    container, then background the app so the user lands back on the
 ///    keyboard (which shows the live recording state).
-/// 3. When the keyboard taps stop it posts a Darwin notification; we stop,
-///    transcribe in the container app with its resident Whisper context, and
-///    publish only the result through the App Group.
+/// 3. When the keyboard taps stop it posts a Darwin notification and opens this
+///    app for the resident Qwen3-ASR Metal pass. We publish the result through
+///    the App Group, then suspend back to the originating app and keyboard.
 @MainActor
 final class AppRecordController: ObservableObject {
     static let shared = AppRecordController()
@@ -31,7 +31,13 @@ final class AppRecordController: ObservableObject {
     private var appActivationObserver: NSObjectProtocol?
     private var transcriptionBackgroundTask: UIBackgroundTaskIdentifier = .invalid
     private var isStartingRecording = false
-    private var isTranscribing = false
+    @Published private(set) var isTranscribing = false
+    private var isStoppingRecording = false
+    private var activeRequestID: String?
+    private var shouldReturnToKeyboardAfterTranscription = false
+    /// Unique to this concrete app process. Persisted transcriptions owned by
+    /// another launch are remnants of a force-quit or jetsam termination.
+    private let launchID = UUID().uuidString
     private let logger = Logger(subsystem: "project.qwen3asr", category: "recording")
 
     private init() {
@@ -39,19 +45,11 @@ final class AppRecordController: ObservableObject {
         observeAudioSessionInterruptions()
         observeAppActivation()
         recoverStaleRecordState()
-        resumePendingTranscriptionIfNeeded()
         resumeRequestedRecordingIfNeeded()
 
-        // Start loading as soon as the app process exists. The actor keeps the
-        // native context alive for all later recording rounds.
-        Task(priority: .utility) {
-            do {
-                try await AppWhisperTranscriber.shared.preload()
-            } catch {
-                print("AppRecordController: Whisper 预加载失败: \(error.localizedDescription)")
-            }
-
-        }
+        // Do not materialize the 2.3 GB model during the initial URL hand-off.
+        // Loading begins only after the user stops recording, once this app has
+        // already returned control to the originating keyboard.
     }
 
     // MARK: - URL entry point
@@ -66,6 +64,11 @@ final class AppRecordController: ObservableObject {
         case .requested where Date().timeIntervalSince1970 - AppGroupBridge.updatedAt > 30:
             AppGroupBridge.setStatus(.idle)
             DarwinNotifications.post(DarwinNotifications.statusChanged)
+        case .transcribing:
+            // A freshly initialized singleton means a new app process. Never
+            // replay a heavy inference that belonged to the process iOS or the
+            // user already terminated; remove its WAV and return to idle.
+            discardInterruptedTranscription()
         default:
             break
         }
@@ -87,10 +90,34 @@ final class AppRecordController: ObservableObject {
     }
 
     func handle(url: URL) {
-        guard url.scheme == "qwen3asr", url.host == "record" else { return }
-        logger.info("Received record URL handoff")
-        openedViaRecordURL = true
-        startRecordingFlow()
+        guard url.scheme == "qwen3asr" else { return }
+
+        switch url.host {
+        case "record":
+            logger.info("Received record URL handoff")
+            openedViaRecordURL = true
+            startRecordingFlow()
+        case "stop":
+            logger.info("Received foreground transcription URL handoff")
+            openedViaRecordURL = false
+            shouldReturnToKeyboardAfterTranscription = true
+
+            if AudioRecorder.shared.isRecording {
+                stopRecordingFlow(publishWAV: true)
+            } else if isTranscribing {
+                return
+            } else if AppGroupBridge.status == .transcribing {
+                resumeOwnedTranscriptionIfNeeded()
+            } else {
+                let detail = "录音进程已被系统结束，请返回键盘重新录音"
+                lastMessage = detail
+                AppGroupBridge.setStatus(.error, message: detail)
+                DarwinNotifications.post(DarwinNotifications.statusChanged)
+                returnToKeyboardAfterTranscriptionIfNeeded()
+            }
+        default:
+            break
+        }
     }
 
     /// The containing app calls this once after its launch-time microphone
@@ -127,6 +154,13 @@ final class AppRecordController: ObservableObject {
 
     private func continueRecordingFlow(permissionGranted granted: Bool) {
         guard !AudioRecorder.shared.isRecording else { return }
+        guard let requestID = AppGroupBridge.currentRequestID else {
+            let detail = "录音请求状态已失效，请返回键盘重新开始"
+            lastMessage = detail
+            AppGroupBridge.setStatus(.error, message: detail)
+            DarwinNotifications.post(DarwinNotifications.statusChanged)
+            return
+        }
         guard granted else {
             logger.error("Microphone permission denied")
             isRecording = false
@@ -164,6 +198,7 @@ final class AppRecordController: ObservableObject {
         }
 
         isRecording = true
+        activeRequestID = requestID
         lastMessage = ""
         AppGroupBridge.setStatus(.recording)
         DarwinNotifications.post(DarwinNotifications.statusChanged)
@@ -179,7 +214,10 @@ final class AppRecordController: ObservableObject {
     /// Stops the recorder. When `publishWAV` is true, the host app performs
     /// transcription with its resident model and publishes the text.
     private func stopRecordingFlow(publishWAV: Bool, errorMessage: String? = nil) {
-        guard AudioRecorder.shared.isRecording else { return }
+        guard AudioRecorder.shared.isRecording, !isStoppingRecording else { return }
+        let stoppedRequestID = activeRequestID
+        activeRequestID = nil
+        isStoppingRecording = true
         autoStopTimer?.invalidate()
         autoStopTimer = nil
         keyboardPresenceTimer?.invalidate()
@@ -191,19 +229,39 @@ final class AppRecordController: ObservableObject {
         AudioRecorder.shared.stopRecording { url in
             Task { @MainActor in
                 print("AppRecordController: 录音已停止, url=\(String(describing: url))")
+                AppRecordController.shared.isStoppingRecording = false
                 AppRecordController.shared.isRecording = false
 
                 if publishWAV {
                     if let url {
+                        guard let requestID = stoppedRequestID,
+                              AppGroupBridge.currentRequestID == requestID else {
+                            let detail = "录音请求状态已失效，请重新录音"
+                            try? FileManager.default.removeItem(at: url)
+                            AppRecordController.shared.lastMessage = detail
+                            AppGroupBridge.setStatus(.error, message: detail)
+                            DarwinNotifications.post(DarwinNotifications.statusChanged)
+                            AppRecordController.shared.returnToKeyboardAfterTranscriptionIfNeeded()
+                            return
+                        }
                         print("AppRecordController: 进入宿主 App 转写: \(url.path)")
-                        AppGroupBridge.setStatus(.transcribing, wavPath: url.path)
+                        guard AppGroupBridge.markTranscribing(
+                            requestID: requestID,
+                            launchID: AppRecordController.shared.launchID,
+                            message: "等待 qwen3asr 前台识别…",
+                            wavPath: url.path
+                        ) else {
+                            try? FileManager.default.removeItem(at: url)
+                            return
+                        }
                         DarwinNotifications.post(DarwinNotifications.statusChanged)
-                        AppRecordController.shared.transcribe(url: url)
+                        AppRecordController.shared.transcribe(url: url, requestID: requestID)
                     } else {
                         let detail = AudioRecorder.shared.lastError ?? "录音文件没有生成，请重新录音"
                         AppRecordController.shared.lastMessage = detail
                         AppGroupBridge.setStatus(.error, message: detail)
                         DarwinNotifications.post(DarwinNotifications.statusChanged)
+                        AppRecordController.shared.returnToKeyboardAfterTranscriptionIfNeeded()
                     }
                 } else {
                     if let errorMessage {
@@ -224,13 +282,36 @@ final class AppRecordController: ObservableObject {
         }
     }
 
-    private func transcribe(url: URL) {
+    private func transcribe(url: URL, requestID: String) {
+        // iOS 27 kills sustained CPU inference in a non-frontmost process and
+        // rejects this MLX Metal pass in the background. Leave the WAV pending
+        // only for this same live process to resume when it becomes active.
+        guard UIApplication.shared.applicationState == .active else {
+            logger.info("Deferring Qwen3-ASR inference until the container is foreground")
+            return
+        }
         guard !isTranscribing else { return }
+        guard AppGroupBridge.ownsTranscription(
+            requestID: requestID,
+            launchID: launchID
+        ) else { return }
         isTranscribing = true
 
-        if transcriptionBackgroundTask == .invalid {
+        guard AppGroupBridge.markTranscribing(
+            requestID: requestID,
+            launchID: launchID,
+            message: "正在识别（\(HybridQwen3ASREngine.backendDescription)）…",
+            wavPath: url.path
+        ) else { return }
+        DarwinNotifications.post(DarwinNotifications.statusChanged)
+
+        // Persistent input already keeps the host eligible during short scene
+        // transitions. If it is unavailable, request only a bounded grace
+        // period; the MLX pass itself still requires the app to stay frontmost.
+        if !AudioRecorder.shared.isPersistentInputRunning,
+           transcriptionBackgroundTask == .invalid {
             transcriptionBackgroundTask = UIApplication.shared.beginBackgroundTask(
-                withName: "qwen3asr-whisper-transcription"
+                withName: "qwen3asr-qwen-transcription"
             ) { [weak self] in
                 guard let self else { return }
                 self.logger.error("Background transcription time expired")
@@ -246,31 +327,86 @@ final class AppRecordController: ObservableObject {
             defer {
                 AppRecordController.shared.isTranscribing = false
                 AppRecordController.shared.endTranscriptionBackgroundTask()
+                AppRecordController.shared.returnToKeyboardAfterTranscriptionIfNeeded()
             }
 
             do {
-                let text = try await AppWhisperTranscriber.shared.transcribe(audioFileURL: url)
+                let result = try await HybridQwen3ASREngine.shared.transcribe(
+                    recordingURL: url,
+                    timeLimit: AppGroupBridge.maximumTranscriptionDuration
+                )
+                guard AppGroupBridge.ownsTranscription(
+                    requestID: requestID,
+                    launchID: AppRecordController.shared.launchID
+                ) else {
+                    try? FileManager.default.removeItem(at: url)
+                    return
+                }
+                let text = result.text
                 print("AppRecordController: 宿主 App 转写完成，文本长度: \(text.count)")
-                AppGroupBridge.setTranscription(text)
-                AppGroupBridge.setStatus(.completed)
+                guard AppGroupBridge.setTranscription(text, for: requestID) else {
+                    try? FileManager.default.removeItem(at: url)
+                    return
+                }
+                let warning = TranscriptionQuality.repetitionWarning(for: text)
+                AppGroupBridge.setStatus(.completed, message: warning)
                 DarwinNotifications.post(DarwinNotifications.statusChanged)
                 try? FileManager.default.removeItem(at: url)
             } catch {
-                print("AppRecordController: 宿主 App 转写失败: \(error.localizedDescription)")
-                AppGroupBridge.setStatus(.error, message: "识别出错: \(error.localizedDescription)")
+                guard AppGroupBridge.ownsTranscription(
+                    requestID: requestID,
+                    launchID: AppRecordController.shared.launchID
+                ) else {
+                    try? FileManager.default.removeItem(at: url)
+                    return
+                }
+                let diagnostic = Self.diagnosticDescription(for: error)
+                print("AppRecordController: 宿主 App 转写失败: \(diagnostic)")
+                AppRecordController.shared.logger.error(
+                    "Qwen3-ASR transcription failed: \(diagnostic, privacy: .public)"
+                )
+                let visibleMessage: String
+                if case HybridQwen3ASRError.inferenceTimedOut = error {
+                    visibleMessage = "识别超过 \(Int(AppGroupBridge.maximumTranscriptionDuration)) 秒，已终止并丢弃本轮录音"
+                    try? FileManager.default.removeItem(at: url)
+                } else {
+                    visibleMessage = "识别出错（\(HybridQwen3ASREngine.backendDescription)）\n\(diagnostic)"
+                }
+                AppRecordController.shared.lastMessage = visibleMessage
+                AppGroupBridge.setStatus(.error, message: visibleMessage)
                 DarwinNotifications.post(DarwinNotifications.statusChanged)
-                // Keep a failed WAV in the App Group. It allows a later app
-                // launch or a device-log investigation to distinguish audio
-                // capture problems from Whisper backend failures.
+                // Non-timeout failures keep their WAV only for diagnostics;
+                // there is no automatic or user-visible retry path.
             }
         }
     }
 
-    /// If iOS killed the app after the recorder published `.transcribing`,
-    /// resume that work on the next app launch instead of leaving the keyboard
-    /// in a permanent loading state.
-    private func resumePendingTranscriptionIfNeeded() {
-        guard AppGroupBridge.status == .transcribing,
+    /// Preserve the underlying NSError chain in device logs. Apple's top-level
+    /// Core ML and Metal messages are often generic; the nested domain/code is
+    /// what distinguishes resource pressure from malformed model inputs.
+    private static func diagnosticDescription(for error: Error) -> String {
+        var messages: [String] = []
+        var current: NSError? = error as NSError
+        var depth = 0
+
+        while let item = current, depth < 6 {
+            messages.append(
+                "\(item.domain)(\(item.code)): \(item.localizedDescription)"
+            )
+            current = item.userInfo[NSUnderlyingErrorKey] as? NSError
+            depth += 1
+        }
+        return messages.joined(separator: " -> ")
+    }
+
+    /// Continue only work claimed by this same live process, for example when a
+    /// 32-second auto-stop finishes just before the keyboard foregrounds us.
+    /// A new process has a different launch ID and discards the WAV instead.
+    private func resumeOwnedTranscriptionIfNeeded() {
+        guard UIApplication.shared.applicationState == .active,
+              AppGroupBridge.status == .transcribing,
+              AppGroupBridge.currentTranscriptionLaunchID == launchID,
+              let requestID = AppGroupBridge.currentRequestID,
               let path = AppGroupBridge.pendingWavPath else { return }
 
         let url = URL(fileURLWithPath: path)
@@ -280,8 +416,19 @@ final class AppRecordController: ObservableObject {
             return
         }
 
-        print("AppRecordController: 恢复被系统中断的宿主 App 转写")
-        transcribe(url: url)
+        print("AppRecordController: 继续当前进程等待前台的宿主 App 转写")
+        transcribe(url: url, requestID: requestID)
+    }
+
+    private func discardInterruptedTranscription() {
+        if let path = AppGroupBridge.pendingWavPath {
+            try? FileManager.default.removeItem(at: URL(fileURLWithPath: path))
+        }
+        isTranscribing = false
+        let detail = "上次识别因 App 被结束而中断，旧录音已删除"
+        lastMessage = detail
+        AppGroupBridge.setStatus(.idle, message: detail)
+        DarwinNotifications.post(DarwinNotifications.statusChanged)
     }
 
     private func endTranscriptionBackgroundTask() {
@@ -290,14 +437,33 @@ final class AppRecordController: ObservableObject {
         transcriptionBackgroundTask = .invalid
     }
 
-    /// Safety net: never let a recording run forever if the keyboard flow dies.
+    /// The stop URL temporarily foregrounds this app because iOS 27 cannot run
+    /// the 1.7B model reliably as a non-frontmost process. Once the shared state
+    /// contains text or a concrete error, reveal the originating keyboard.
+    private func returnToKeyboardAfterTranscriptionIfNeeded() {
+        guard shouldReturnToKeyboardAfterTranscription else { return }
+        shouldReturnToKeyboardAfterTranscription = false
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+            guard UIApplication.shared.applicationState == .active else { return }
+            let suspendSelector = NSSelectorFromString("suspend")
+            guard UIApplication.shared.responds(to: suspendSelector) else { return }
+            UIApplication.shared.perform(suspendSelector)
+        }
+    }
+
+    /// Keeps each keyboard dictation round within the model's supported window.
+    /// Reaching the limit is a normal stop and still transcribes the captured
+    /// audio, matching an explicit tap on the keyboard's stop button.
     private func scheduleAutoStop() {
         autoStopTimer?.invalidate()
-        autoStopTimer = Timer.scheduledTimer(withTimeInterval: 120, repeats: false) { _ in
+        autoStopTimer = Timer.scheduledTimer(
+            withTimeInterval: AppGroupBridge.maximumRecordingDuration,
+            repeats: false
+        ) { _ in
             Task { @MainActor in
                 AppRecordController.shared.stopRecordingFlow(
-                    publishWAV: false,
-                    errorMessage: "录音超时，已自动停止"
+                    publishWAV: true
                 )
             }
         }
@@ -411,7 +577,7 @@ final class AppRecordController: ObservableObject {
         ) { _ in
             Task { @MainActor in
                 AudioRecorder.shared.resumePersistentInputIfNeeded()
-                AppRecordController.shared.resumePendingTranscriptionIfNeeded()
+                AppRecordController.shared.resumeOwnedTranscriptionIfNeeded()
                 AppRecordController.shared.resumeRequestedRecordingIfNeeded()
             }
         }

@@ -12,21 +12,24 @@ import SwiftUI
 /// to NSDictionary, which is confirmed by the physical-device crash logs.
 extension UIInputViewController {
     /// Custom keyboards have no supported API for opening their container app,
-    /// so this bridge is deliberately limited to sideloaded builds. If the
-    /// scene request is rejected, fall back to the older responder selector.
+    /// so this bridge is deliberately limited to sideloaded builds. Prefer the
+    /// responder-chain hand-off used by the original keyboard flow because it
+    /// preserves the originating app's return stack more reliably. The scene
+    /// request remains a fallback for newer hosts that hide `openURL:`.
     func openContainingApp(at url: URL, completion: @escaping (Bool) -> Void) {
+        if invokeLegacyOpenURL(url) {
+            completion(true)
+            return
+        }
+
         guard let scene = view.window?.windowScene ?? responderScene() else {
-            completion(invokeLegacyOpenURL(url))
+            completion(false)
             return
         }
 
         let options = UIScene.OpenExternalURLOptions()
-        scene.open(url, options: options) { [weak self] didOpen in
-            if didOpen {
-                completion(true)
-            } else {
-                completion(self?.invokeLegacyOpenURL(url) ?? false)
-            }
+        scene.open(url, options: options) { didOpen in
+            completion(didOpen)
         }
     }
 
@@ -68,10 +71,12 @@ extension UIInputViewController {
 
 class KeyboardViewController: UIInputViewController {
     private var hostingController: UIHostingController<KeyboardView>?
+    private var keyboardHeightConstraint: NSLayoutConstraint?
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        
+
+        installNormalKeyboardHeight()
         setupKeyboardView()
     }
     
@@ -92,6 +97,46 @@ class KeyboardViewController: UIInputViewController {
         ])
         
         hostingController.didMove(toParent: self)
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        updateNormalKeyboardHeight()
+    }
+
+    override func viewWillTransition(
+        to size: CGSize,
+        with coordinator: UIViewControllerTransitionCoordinator
+    ) {
+        super.viewWillTransition(to: size, with: coordinator)
+        coordinator.animate(alongsideTransition: nil) { [weak self] _ in
+            self?.updateNormalKeyboardHeight()
+        }
+    }
+
+    /// The previous intrinsic SwiftUI height collapsed the input view to a
+    /// short toolbar. Reserve a system-keyboard-sized surface so recording
+    /// progress and multi-line diagnostics remain readable.
+    private func installNormalKeyboardHeight() {
+        let constraint = view.heightAnchor.constraint(equalToConstant: preferredKeyboardHeight)
+        constraint.priority = UILayoutPriority(999)
+        constraint.isActive = true
+        keyboardHeightConstraint = constraint
+    }
+
+    private func updateNormalKeyboardHeight() {
+        let height = preferredKeyboardHeight
+        guard keyboardHeightConstraint?.constant != height else { return }
+        keyboardHeightConstraint?.constant = height
+        view.setNeedsLayout()
+    }
+
+    private var preferredKeyboardHeight: CGFloat {
+        if traitCollection.userInterfaceIdiom == .pad {
+            return 300
+        }
+        let isLandscape = view.window?.windowScene?.interfaceOrientation.isLandscape == true
+        return isLandscape ? 200 : 260
     }
 
     override func viewWillDisappear(_ animated: Bool) {
