@@ -9,6 +9,7 @@ public struct KeyboardView: View {
     @State private var statusText = "Qwen3-ASR 1.7B 已就绪，点击说话"
     @State private var recordingElapsed: TimeInterval = 0
     @State private var recordingAttemptID = UUID()
+    @StateObject private var nineKeyInput = NineKeyInputModel()
 
     private let statusPoller = Timer.publish(every: 0.35, on: .main, in: .common).autoconnect()
 
@@ -22,6 +23,11 @@ public struct KeyboardView: View {
             topStatusBar
                 .padding(.horizontal, 12)
                 .padding(.top, 4)
+
+            if nineKeyInput.isComposing {
+                candidateBar
+                    .padding(.horizontal, 12)
+            }
 
             // 主键盘布局：左侧2按钮居中工具栏 + 右侧 4行5列 严丝合缝 Grid
             HStack(spacing: 8) {
@@ -48,6 +54,44 @@ public struct KeyboardView: View {
             }
             refreshSharedRecordStatus()
         }
+    }
+
+    // MARK: - Nine-key Composition
+
+    private var candidateBar: some View {
+        HStack(spacing: 8) {
+            Text(nineKeyInput.digits)
+                .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                .foregroundColor(.secondary)
+                .frame(minWidth: 48, alignment: .leading)
+
+            Divider()
+                .frame(height: 24)
+
+            if nineKeyInput.candidates.isEmpty {
+                Text("暂无候选")
+                    .font(.system(size: 14))
+                    .foregroundColor(.secondary)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 4) {
+                        ForEach(nineKeyInput.candidates) { candidate in
+                            Button(candidate.text) {
+                                commit(candidate)
+                            }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundColor(.primary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(standardKeyBackgroundColor)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                        }
+                    }
+                }
+            }
+        }
+        .frame(height: 34)
     }
 
     // MARK: - Top Status Bar
@@ -118,18 +162,13 @@ public struct KeyboardView: View {
             voiceButton
 
             // 2. 切换键盘按钮
-            Button(action: { controller?.advanceToNextInputMode() }) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(functionKeyBackgroundColor)
-                        .shadow(color: Color.black.opacity(0.25), radius: 0.5, x: 0, y: 1)
-                    Image(systemName: "globe")
-                        .font(.system(size: 20))
-                        .foregroundColor(.primary)
-                }
-                .frame(height: 48)
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(functionKeyBackgroundColor)
+                    .shadow(color: Color.black.opacity(0.25), radius: 0.5, x: 0, y: 1)
+                InputModeSwitchButton(controller: controller)
             }
-            .accessibilityLabel("切换输入法")
+            .frame(height: 48)
 
             Spacer()
         }
@@ -167,13 +206,17 @@ public struct KeyboardView: View {
             Grid(horizontalSpacing: spacing, verticalSpacing: spacing) {
                 // Row 1: 123 | ,.?! | ABC | DEF | Delete
                 GridRow {
-                    keyButton("123") { controller?.textDocumentProxy.insertText("1") }
-                    keyButton(",.?!") { controller?.textDocumentProxy.insertText("，") }
-                    keyButton("ABC") { controller?.textDocumentProxy.insertText("a") }
-                    keyButton("DEF") { controller?.textDocumentProxy.insertText("d") }
+                    keyButton("123") { insertTextRespectingComposition("1") }
+                    keyButton(",.?!") { insertTextRespectingComposition("，") }
+                    keyButton("ABC") { appendNineKeyDigit("2") }
+                    keyButton("DEF") { appendNineKeyDigit("3") }
 
                     functionKeyButton(iconSystemName: "delete.left") {
-                        controller?.textDocumentProxy.deleteBackward()
+                        if nineKeyInput.isComposing {
+                            nineKeyInput.deleteBackward()
+                        } else {
+                            controller?.textDocumentProxy.deleteBackward()
+                        }
                     }
                 }
                 .frame(height: rowHeight)
@@ -181,24 +224,24 @@ public struct KeyboardView: View {
                 // Rows 2 & 3 Combined: #@¥ (Col 1, Spans 2 Rows) | Middle 3x2 Block (Cols 2-4) | Return (Col 5, Spans 2 Rows)
                 GridRow {
                     // Col 1: #@¥
-                    keyButton("#@¥") { controller?.textDocumentProxy.insertText("#") }
+                    keyButton("#@¥") { insertTextRespectingComposition("#") }
                         .frame(maxHeight: .infinity)
 
                     // Cols 2, 3, 4: Middle 2-row letter keypad block
                     VStack(spacing: spacing) {
                         // Upper row: GHI | JKL | MNO
                         HStack(spacing: spacing) {
-                            keyButton("GHI") { controller?.textDocumentProxy.insertText("g") }
-                            keyButton("JKL") { controller?.textDocumentProxy.insertText("j") }
-                            keyButton("MNO") { controller?.textDocumentProxy.insertText("m") }
+                            keyButton("GHI") { appendNineKeyDigit("4") }
+                            keyButton("JKL") { appendNineKeyDigit("5") }
+                            keyButton("MNO") { appendNineKeyDigit("6") }
                         }
                         .frame(height: rowHeight)
 
                         // Lower row: PQRS | TUV | WXYZ
                         HStack(spacing: spacing) {
-                            keyButton("PQRS") { controller?.textDocumentProxy.insertText("p") }
-                            keyButton("TUV") { controller?.textDocumentProxy.insertText("t") }
-                            keyButton("WXYZ") { controller?.textDocumentProxy.insertText("w") }
+                            keyButton("PQRS") { appendNineKeyDigit("7") }
+                            keyButton("TUV") { appendNineKeyDigit("8") }
+                            keyButton("WXYZ") { appendNineKeyDigit("9") }
                         }
                         .frame(height: rowHeight)
                     }
@@ -213,11 +256,17 @@ public struct KeyboardView: View {
 
                 // Row 4: 😀 | 选拼音 | 空格 (Span 2 cols) | Secondary Mic
                 GridRow {
-                    functionKeyButton(title: "😀") { controller?.textDocumentProxy.insertText("😀") }
-                    functionKeyButton(title: "选拼音") { controller?.textDocumentProxy.insertText("拼音") }
+                    functionKeyButton(title: "😀") { insertTextRespectingComposition("😀") }
+                    functionKeyButton(title: "选拼音") { commitFirstCandidate() }
 
                     // Space bar spanning 2 columns
-                    Button(action: { controller?.textDocumentProxy.insertText(" ") }) {
+                    Button(action: {
+                        if nineKeyInput.isComposing {
+                            commitFirstCandidate()
+                        } else {
+                            controller?.textDocumentProxy.insertText(" ")
+                        }
+                    }) {
                         ZStack {
                             RoundedRectangle(cornerRadius: 8)
                                 .fill(standardKeyBackgroundColor)
@@ -241,7 +290,13 @@ public struct KeyboardView: View {
     }
 
     private var returnButton: some View {
-        Button(action: { controller?.textDocumentProxy.insertText("\n") }) {
+        Button(action: {
+            if nineKeyInput.isComposing {
+                commitFirstCandidate()
+            } else {
+                controller?.textDocumentProxy.insertText("\n")
+            }
+        }) {
             ZStack {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(functionKeyBackgroundColor)
@@ -252,6 +307,29 @@ public struct KeyboardView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    private func appendNineKeyDigit(_ digit: Character) {
+        nineKeyInput.append(
+            digit,
+            contextBeforeInput: controller?.textDocumentProxy.documentContextBeforeInput
+        )
+    }
+
+    private func commit(_ candidate: NineKeyCandidate) {
+        controller?.textDocumentProxy.insertText(nineKeyInput.commit(candidate))
+    }
+
+    private func commitFirstCandidate() {
+        guard let text = nineKeyInput.commitFirstCandidate() else { return }
+        controller?.textDocumentProxy.insertText(text)
+    }
+
+    private func insertTextRespectingComposition(_ text: String) {
+        if let composition = nineKeyInput.commitFirstCandidate() {
+            controller?.textDocumentProxy.insertText(composition)
+        }
+        controller?.textDocumentProxy.insertText(text)
     }
 
     private func keyButton(_ title: String, action: @escaping () -> Void) -> some View {
@@ -520,13 +598,44 @@ public struct KeyboardView: View {
     }
 }
 
-#if DEBUG
-struct KeyboardView_Previews: PreviewProvider {
-    static var previews: some View {
-        KeyboardView()
-            .frame(width: 1024, height: 300)
-            .previewLayout(.fixed(width: 1024, height: 300))
-            .previewDisplayName("iPad Keyboard")
+/// Bridges the system input-mode switcher into SwiftUI. Passing every touch
+/// event to `handleInputModeList` preserves the system behavior: a tap advances
+/// to the next enabled keyboard, while a long press or upward swipe presents
+/// the system-managed list of enabled keyboards.
+private struct InputModeSwitchButton: UIViewRepresentable {
+    weak var controller: UIInputViewController?
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(controller: controller)
+    }
+
+    func makeUIView(context: Context) -> UIButton {
+        let button = UIButton(type: .system)
+        button.setImage(UIImage(systemName: "globe"), for: .normal)
+        button.tintColor = .label
+        button.accessibilityLabel = "切换输入法"
+        button.addTarget(
+            context.coordinator,
+            action: #selector(Coordinator.handleInputModeList(_:event:)),
+            for: .allTouchEvents
+        )
+        return button
+    }
+
+    func updateUIView(_ button: UIButton, context: Context) {
+        context.coordinator.controller = controller
+        button.tintColor = .label
+    }
+
+    final class Coordinator: NSObject {
+        weak var controller: UIInputViewController?
+
+        init(controller: UIInputViewController?) {
+            self.controller = controller
+        }
+
+        @objc func handleInputModeList(_ sender: UIButton, event: UIEvent) {
+            controller?.handleInputModeList(from: sender, with: event)
+        }
     }
 }
-#endif

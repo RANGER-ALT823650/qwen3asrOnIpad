@@ -17,6 +17,10 @@
 		B2000003301D0000001425BE /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = B200000A301D0000001425BE /* MLX */; };
 		B2000005301D0000001425BE /* Qwen3-ASR-1.7B-MLX-5bit in Resources */ = {isa = PBXBuildFile; fileRef = A100001A301D0000001425BE /* Qwen3-ASR-1.7B-MLX-5bit */; };
 		B2000006301D0000001425BE /* qwen3asr/HybridQwen3ASREngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000007301D0000001425BE /* qwen3asr/HybridQwen3ASREngine.swift */; };
+		D4000001301D0000001425BE /* Qwen3ASRKeyboard/KeyboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4000003301D0000001425BE /* Qwen3ASRKeyboard/KeyboardView.swift */; };
+		D4000002301D0000001425BE /* Qwen3ASRKeyboard/KeyboardViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4000004301D0000001425BE /* Qwen3ASRKeyboard/KeyboardViewController.swift */; };
+		D4000005301D0000001425BE /* Qwen3ASRKeyboard/NineKeyLexicon.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4000007301D0000001425BE /* Qwen3ASRKeyboard/NineKeyLexicon.swift */; };
+		D4000006301D0000001425BE /* Qwen3ASRKeyboard/NineKeyInputModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4000008301D0000001425BE /* Qwen3ASRKeyboard/NineKeyInputModel.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -65,6 +69,10 @@
 		A1000001301D0000001425BE /* Qwen3ASRLab.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Qwen3ASRLab.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A100001A301D0000001425BE /* Qwen3-ASR-1.7B-MLX-5bit */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "Qwen3-ASR-1.7B-MLX-5bit"; sourceTree = "<group>"; };
 		B2000007301D0000001425BE /* qwen3asr/HybridQwen3ASREngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = qwen3asr/HybridQwen3ASREngine.swift; sourceTree = "<group>"; };
+		D4000003301D0000001425BE /* Qwen3ASRKeyboard/KeyboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Qwen3ASRKeyboard/KeyboardView.swift; sourceTree = "<group>"; };
+		D4000004301D0000001425BE /* Qwen3ASRKeyboard/KeyboardViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Qwen3ASRKeyboard/KeyboardViewController.swift; sourceTree = "<group>"; };
+		D4000007301D0000001425BE /* Qwen3ASRKeyboard/NineKeyLexicon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Qwen3ASRKeyboard/NineKeyLexicon.swift; sourceTree = "<group>"; };
+		D4000008301D0000001425BE /* Qwen3ASRKeyboard/NineKeyInputModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Qwen3ASRKeyboard/NineKeyInputModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -157,6 +165,7 @@
 				7B5F7374301CEAF8001425BE /* qwen3asrTests */,
 				7B5F737E301CEAF8001425BE /* qwen3asrUITests */,
 				7B5F7365301CEAF8001425BE /* Products */,
+				7B85E01730231C5B00CEA7B9 /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -170,6 +179,17 @@
 				7B5F737B301CEAF8001425BE /* qwen3asrUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		7B85E01730231C5B00CEA7B9 /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				D4000003301D0000001425BE /* Qwen3ASRKeyboard/KeyboardView.swift */,
+				D4000004301D0000001425BE /* Qwen3ASRKeyboard/KeyboardViewController.swift */,
+				D4000007301D0000001425BE /* Qwen3ASRKeyboard/NineKeyLexicon.swift */,
+				D4000008301D0000001425BE /* Qwen3ASRKeyboard/NineKeyInputModel.swift */,
+			);
+			name = "Recovered References";
 			sourceTree = "<group>";
 		};
 		A1000018301D0000001425BE /* ModelAssets */ = {
@@ -454,6 +474,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D4000001301D0000001425BE /* Qwen3ASRKeyboard/KeyboardView.swift in Sources */,
+				D4000002301D0000001425BE /* Qwen3ASRKeyboard/KeyboardViewController.swift in Sources */,
+				D4000005301D0000001425BE /* Qwen3ASRKeyboard/NineKeyLexicon.swift in Sources */,
+				D4000006301D0000001425BE /* Qwen3ASRKeyboard/NineKeyInputModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
