@@ -10,8 +10,18 @@ import Testing
 
 struct qwen3asrTests {
 
-    @Test func keyboardRecordingLimitIs32Seconds() {
+    @Test func keyboardRecordingLimitDefaultsTo32Seconds() {
+        // Simulate a fresh install: no stored value must fall back to 32.
+        AppGroupBridge.defaults?.removeObject(forKey: AppGroupBridge.Keys.maximumRecordingDuration)
+        #expect(AppGroupBridge.defaultRecordingDuration == 32)
         #expect(AppGroupBridge.maximumRecordingDuration == 32)
+    }
+
+    @Test func recordingDurationLimitIsPersistedAcrossReaders() {
+        AppGroupBridge.maximumRecordingDuration = 60
+        #expect(AppGroupBridge.maximumRecordingDuration == 60)
+        // Restore the default so other tests / the host app stay unchanged.
+        AppGroupBridge.maximumRecordingDuration = AppGroupBridge.defaultRecordingDuration
     }
 
     @Test func transcriptionDeadlineIs180Seconds() {

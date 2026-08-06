@@ -4,6 +4,15 @@ struct ContentView: View {
     @StateObject private var recordController = AppRecordController.shared
     @StateObject private var audioRecorder = AudioRecorder.shared
 
+    /// User-selectable maximum recording length, persisted in the App Group so
+    /// the keyboard extension and the recording host always agree.
+    @State private var maximumRecordingDuration: TimeInterval = AppGroupBridge.maximumRecordingDuration
+
+    /// Continuous per-second choices offered in the recording-limit wheel.
+    /// 15–50 秒; 32 秒 remains the fallback so existing behavior is unchanged
+    /// until the user picks another value.
+    private static let recordingDurationOptions: [TimeInterval] = (15...50).map { TimeInterval($0) }
+
     var body: some View {
         NavigationView {
             ScrollView {
@@ -16,6 +25,9 @@ struct ContentView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 20)
+                .onChange(of: maximumRecordingDuration) { newValue in
+                    AppGroupBridge.maximumRecordingDuration = newValue
+                }
             }
             .background(Color(UIColor.systemGroupedBackground).ignoresSafeArea())
             .navigationTitle("Qwen3-ASR 语音输入法")
@@ -152,7 +164,21 @@ struct ContentView: View {
             Text("已内置完整的 Qwen3-ASR 1.7B MLX 5-bit 模型，音频编码与文本解码复用同一份本地权重。识别过程不上传音频、不依赖局域网，也不需要启动 Mac 服务。")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
-                Label("最长录音 \(Int(AppGroupBridge.maximumRecordingDuration)) 秒；iPad 分屏前台 MLX 推理", systemImage: "cpu")
+            Divider()
+            Label("最长录音时间", systemImage: "timer")
+                .font(.subheadline)
+                .fontWeight(.medium)
+            Picker("最长录音时间", selection: $maximumRecordingDuration) {
+                ForEach(Self.recordingDurationOptions, id: \.self) { seconds in
+                    Text("\(Int(seconds)) 秒").tag(seconds)
+                }
+            }
+            .pickerStyle(.wheel)
+            .disabled(recordController.isRecording)
+            Text("到达所选上限会自动停止并开始识别；修改后从下一次录音起生效。")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            Label("当前最长录音 \(Int(maximumRecordingDuration)) 秒；iPad 分屏前台 MLX 推理", systemImage: "cpu")
                 .font(.caption)
                 .foregroundColor(.secondary)
         }

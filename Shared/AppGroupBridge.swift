@@ -5,8 +5,26 @@ import Foundation
 public enum AppGroupBridge {
     public static let groupID = "group.project.qwen3asr"
     public static let suiteName = groupID
-    public static let maximumRecordingDuration: TimeInterval = 32
+    /// Fallback maximum recording length when no user choice is stored yet.
+    public static let defaultRecordingDuration: TimeInterval = 32
     public static let maximumTranscriptionDuration: TimeInterval = 180
+
+    /// Maximum recording length chosen by the user in the host app. Stored in
+    /// the App Group so the keyboard extension and the recording host both see
+    /// the same value; falls back to `defaultRecordingDuration`.
+    public static var maximumRecordingDuration: TimeInterval {
+        get {
+            guard let defaults,
+                  let stored = defaults.object(forKey: Keys.maximumRecordingDuration) as? Double else {
+                return defaultRecordingDuration
+            }
+            return stored
+        }
+        set {
+            defaults?.set(newValue, forKey: Keys.maximumRecordingDuration)
+            defaults?.synchronize()
+        }
+    }
 
     public enum Keys {
         public static let status = "recordStatus"
@@ -19,6 +37,7 @@ public enum AppGroupBridge {
         public static let acknowledgedRequestID = "acknowledgedRecordRequestID"
         public static let transcriptionLaunchID = "transcriptionLaunchID"
         public static let transcriptionStartedAt = "transcriptionStartedAt"
+        public static let maximumRecordingDuration = "maximumRecordingDuration"
     }
 
     public enum RecordStatus: String {
