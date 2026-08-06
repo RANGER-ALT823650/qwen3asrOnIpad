@@ -16,7 +16,7 @@
 
 ---
 
-## 💡 开发者碎碎念 (The Origin & Technical Journey)
+## 💡 碎碎念 (The Origin & Technical Journey)
 
 项目最初的目标很简单：**把千问 3 (Qwen3-ASR 1.7B) 这个强大的语音识别大模型塞进 iOS 端侧，做成随叫随到的系统级语音输入法。**
 
