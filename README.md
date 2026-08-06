@@ -68,16 +68,23 @@ iOS 的第三方键盘只是一个键盘扩展（Input Method Extension），系
 
 ```
 qwen3asrOnIpad/
-├── Shared/                      # App Group 共享通信层 & 状态定义
-│   └── AppGroupBridge.swift     # 状态管理、录音时长持久化与 App Group 读写
+├── Shared/                      # App Group 共享通信层 & 音频 IPC 通信
+│   ├── AppGroupBridge.swift     # 状态管理、录音时长持久化与 App Group 读写
+│   ├── AudioRecorder.swift      # 离线 PCM/WAV 录音与音频流封装
+│   └── DarwinNotifications.swift# 跨进程 Darwin 信号广播桥接
 ├── qwen3asr/                    # 主 App (Host App) - 分屏运行主进程
-│   ├── HybridQwen3ASREngine.swift  # Qwen3-ASR MLX-5bit 模型推理引擎
-│   ├── AppRecordController.swift   # 监听键盘请求、处理音频与推理调度
-│   └── ContentView.swift        # 主界面与设置（支持最长录音时长调整）
+│   ├── HybridQwen3ASREngine.swift  # Qwen3-ASR MLX-5bit 本地模型推理引擎
+│   ├── AppRecordController.swift   # 监听键盘请求、逻辑与推理调度
+│   ├── ContentView.swift        # 主界面设置（支持最长录音时长调节）
+│   └── qwen3asrApp.swift        # 应用入口与生命周期管理
 ├── Qwen3ASRKeyboard/            # 键盘扩展 (Keyboard Extension)
 │   ├── KeyboardViewController.swift # 系统键盘生命周期与输入挂载
-│   └── KeyboardView.swift       # 键盘录音 UI、波形动画与状态反馈
-└── ModelAssets/                 # Qwen3-ASR 1.7B 5-bit 本地模型资源
+│   ├── KeyboardView.swift       # 键盘录音 UI、波形动画与状态反馈
+│   ├── NineKeyInputModel.swift  # 九键输入逻辑与候选词推导
+│   ├── NineKeyLexicon.swift     # 本地离线九键拼音词库匹配引擎
+│   └── Resources/               # 离线词库文件 (pinyin9.lex)
+├── qwen3asrTests/               # 核心逻辑与 App Group 通信单元测试
+└── ModelAssets/                 # Qwen3-ASR 1.7B 5-bit 本地模型配置
 ```
 
 ---
