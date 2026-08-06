@@ -1,7 +1,20 @@
+# macOS & Xcode Caches
 .DS_Store
 build/
+DerivedData/
 *.xcodeproj/xcuserdata/
 *.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcuserstate
 
-# Local Qwen model weights are bundled for device builds but are too large for Git.
+# Local Model Weights & Binaries (Too large for Git)
+*.safetensors
+*.bin
 ModelAssets/**/*.safetensors
+Qwen3ASRKeyboard/Models/*.bin
+
+# Experimental & Development Files (Ignored to keep repository clean)
+Qwen3ASRLab/
+Tools/
+summary.md
+qwen3asrUITests/
