@@ -2,6 +2,13 @@ import SwiftUI
 import Combine
 
 public struct KeyboardView: View {
+    private enum KeyboardLayout: Equatable {
+        case letters
+        case numbers
+        case punctuation
+        case symbols
+    }
+
     public weak var controller: UIInputViewController?
 
     @State private var recordStatus: AppGroupBridge.RecordStatus = .idle
@@ -10,6 +17,7 @@ public struct KeyboardView: View {
     @State private var recordingElapsed: TimeInterval = 0
     @State private var recordingAttemptID = UUID()
     @StateObject private var nineKeyInput = NineKeyInputModel()
+    @State private var keyboardLayout: KeyboardLayout = .letters
 
     private let statusPoller = Timer.publish(every: 0.35, on: .main, in: .common).autoconnect()
 
@@ -24,14 +32,17 @@ public struct KeyboardView: View {
                 .padding(.horizontal, 12)
                 .padding(.top, 4)
 
-            if nineKeyInput.isComposing {
-                candidateBar
-                    .padding(.horizontal, 12)
-            }
+            // 始终保留候选栏的空间；仅在九键组合输入时显示内容，避免首次输入时重排主键区。
+            candidateBar
+                .padding(.horizontal, 12)
+                .opacity(nineKeyInput.isComposing ? 1 : 0)
+                .allowsHitTesting(nineKeyInput.isComposing)
+                .accessibilityHidden(!nineKeyInput.isComposing)
 
-            // 主键盘布局：左侧2按钮居中工具栏 + 右侧 4行5列 严丝合缝 Grid
+            // 主键盘布局：左侧语音工具栏 + 右侧固定 4 行 5 列 Grid。
+            // 候选栏高度始终预留，因此首次输入不会挤压并下移键盘。
             HStack(spacing: 8) {
-                // 左侧工具栏：仅包含 2 个按钮，整体高度对齐右侧，垂直居中
+                // 左侧工具栏：语音按钮垂直居中，并与右侧主键区等高。
                 leftSidebar
                     .frame(width: 155)
 
@@ -59,34 +70,40 @@ public struct KeyboardView: View {
     // MARK: - Nine-key Composition
 
     private var candidateBar: some View {
-        HStack(spacing: 8) {
-            Text(nineKeyInput.digits)
-                .font(.system(size: 14, weight: .semibold, design: .monospaced))
-                .foregroundColor(.secondary)
-                .frame(minWidth: 48, alignment: .leading)
-
-            Divider()
-                .frame(height: 24)
-
-            if nineKeyInput.candidates.isEmpty {
-                Text("暂无候选")
-                    .font(.system(size: 14))
+        GeometryReader { geometry in
+            HStack(spacing: 8) {
+                // 输入码保持紧凑，候选词则在其余整段空间中居中。
+                Text(nineKeyInput.digits)
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
                     .foregroundColor(.secondary)
-            } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 4) {
-                        ForEach(nineKeyInput.candidates) { candidate in
-                            Button(candidate.text) {
-                                commit(candidate)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+                    .frame(width: 52, alignment: .leading)
+
+                if nineKeyInput.candidates.isEmpty {
+                    Text("暂无候选")
+                        .font(.system(size: 14))
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                } else {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 4) {
+                            ForEach(nineKeyInput.candidates) { candidate in
+                                Button(candidate.text) {
+                                    commit(candidate)
+                                }
+                                .buttonStyle(.plain)
+                                .font(.system(size: 17, weight: .medium))
+                                .foregroundColor(.primary)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(standardKeyBackgroundColor)
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
                             }
-                            .buttonStyle(.plain)
-                            .font(.system(size: 17, weight: .medium))
-                            .foregroundColor(.primary)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(standardKeyBackgroundColor)
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
                         }
+                        // 候选较少时也占满候选栏，令整组词始终居中；超过宽度时仍可横向滚动。
+                        .frame(minWidth: max(0, geometry.size.width - 60), alignment: .center)
+                        .padding(.horizontal, 4)
                     }
                 }
             }
@@ -153,22 +170,12 @@ public struct KeyboardView: View {
         .padding(.vertical, 2)
     }
 
-    // MARK: - Left Sidebar (2 Buttons Vertically Centered)
+    // MARK: - Left Sidebar
     private var leftSidebar: some View {
         VStack(spacing: 10) {
             Spacer()
 
-            // 1. 点击语音输入按钮
             voiceButton
-
-            // 2. 切换键盘按钮
-            ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(functionKeyBackgroundColor)
-                    .shadow(color: Color.black.opacity(0.25), radius: 0.5, x: 0, y: 1)
-                InputModeSwitchButton(controller: controller)
-            }
-            .frame(height: 48)
 
             Spacer()
         }
@@ -203,89 +210,221 @@ public struct KeyboardView: View {
             let spacing: CGFloat = 6
             let rowHeight = max(0, (geometry.size.height - spacing * 3) / 4)
 
-            Grid(horizontalSpacing: spacing, verticalSpacing: spacing) {
-                // Row 1: 123 | ,.?! | ABC | DEF | Delete
-                GridRow {
-                    keyButton("123") { insertTextRespectingComposition("1") }
-                    keyButton(",.?!") { insertTextRespectingComposition("，") }
-                    keyButton("ABC") { appendNineKeyDigit("2") }
-                    keyButton("DEF") { appendNineKeyDigit("3") }
+            keypadGrid(rowHeight: rowHeight, spacing: spacing)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
 
-                    functionKeyButton(iconSystemName: "delete.left") {
-                        if nineKeyInput.isComposing {
-                            nineKeyInput.deleteBackward()
-                        } else {
-                            controller?.textDocumentProxy.deleteBackward()
-                        }
+    @ViewBuilder
+    private func keypadGrid(rowHeight: CGFloat, spacing: CGFloat) -> some View {
+        switch keyboardLayout {
+        case .letters:
+            letterKeypadGrid(rowHeight: rowHeight, spacing: spacing)
+        case .numbers:
+            numberKeypadGrid(rowHeight: rowHeight, spacing: spacing)
+        case .punctuation:
+            punctuationKeypadGrid(rowHeight: rowHeight, spacing: spacing)
+        case .symbols:
+            otherSymbolKeypadGrid(rowHeight: rowHeight, spacing: spacing)
+        }
+    }
+
+    private func letterKeypadGrid(rowHeight: CGFloat, spacing: CGFloat) -> some View {
+        Grid(horizontalSpacing: spacing, verticalSpacing: spacing) {
+            GridRow {
+                layoutKeyButton("123") { switchKeyboardLayout(to: .numbers) }
+                layoutKeyButton(",.?!") { switchKeyboardLayout(to: .punctuation) }
+                keyButton("ABC") { appendNineKeyDigit("2") }
+                keyButton("DEF") { appendNineKeyDigit("3") }
+                deleteKey
+            }
+            .frame(height: rowHeight)
+
+            GridRow {
+                layoutKeyButton("*@¥") { switchKeyboardLayout(to: .symbols) }
+                    .frame(maxHeight: .infinity)
+
+                VStack(spacing: spacing) {
+                    HStack(spacing: spacing) {
+                        keyButton("GHI") { appendNineKeyDigit("4") }
+                        keyButton("JKL") { appendNineKeyDigit("5") }
+                        keyButton("MNO") { appendNineKeyDigit("6") }
                     }
-                }
-                .frame(height: rowHeight)
+                    .frame(height: rowHeight)
 
-                // Rows 2 & 3 Combined: #@¥ (Col 1, Spans 2 Rows) | Middle 3x2 Block (Cols 2-4) | Return (Col 5, Spans 2 Rows)
-                GridRow {
-                    // Col 1: #@¥
-                    keyButton("#@¥") { insertTextRespectingComposition("#") }
-                        .frame(maxHeight: .infinity)
-
-                    // Cols 2, 3, 4: Middle 2-row letter keypad block
-                    VStack(spacing: spacing) {
-                        // Upper row: GHI | JKL | MNO
-                        HStack(spacing: spacing) {
-                            keyButton("GHI") { appendNineKeyDigit("4") }
-                            keyButton("JKL") { appendNineKeyDigit("5") }
-                            keyButton("MNO") { appendNineKeyDigit("6") }
-                        }
-                        .frame(height: rowHeight)
-
-                        // Lower row: PQRS | TUV | WXYZ
-                        HStack(spacing: spacing) {
-                            keyButton("PQRS") { appendNineKeyDigit("7") }
-                            keyButton("TUV") { appendNineKeyDigit("8") }
-                            keyButton("WXYZ") { appendNineKeyDigit("9") }
-                        }
-                        .frame(height: rowHeight)
+                    HStack(spacing: spacing) {
+                        keyButton("PQRS") { appendNineKeyDigit("7") }
+                        keyButton("TUV") { appendNineKeyDigit("8") }
+                        keyButton("WXYZ") { appendNineKeyDigit("9") }
                     }
-                    .frame(height: rowHeight * 2 + spacing)
-                    .gridCellColumns(3)
-
-                    // Col 5: Return Button
-                    returnButton
-                        .frame(maxHeight: .infinity)
+                    .frame(height: rowHeight)
                 }
                 .frame(height: rowHeight * 2 + spacing)
+                .gridCellColumns(3)
 
-                // Row 4: 😀 | 选拼音 | 空格 (Span 2 cols) | Secondary Mic
-                GridRow {
-                    functionKeyButton(title: "😀") { insertTextRespectingComposition("😀") }
-                    functionKeyButton(title: "选拼音") { commitFirstCandidate() }
-
-                    // Space bar spanning 2 columns
-                    Button(action: {
-                        if nineKeyInput.isComposing {
-                            commitFirstCandidate()
-                        } else {
-                            controller?.textDocumentProxy.insertText(" ")
-                        }
-                    }) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(standardKeyBackgroundColor)
-                                .shadow(color: Color.black.opacity(0.25), radius: 0.5, x: 0, y: 1)
-                            Text("空 格")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.primary)
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    }
-                    .gridCellColumns(2)
-
-                    functionKeyButton(iconSystemName: "mic") {
-                        handleVoiceTap()
-                    }
-                }
-                .frame(height: rowHeight)
+                returnButton
+                    .frame(maxHeight: .infinity)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(height: rowHeight * 2 + spacing)
+
+            GridRow {
+                inputModeSwitchKey
+                functionKeyButton(title: "选拼音") { commitFirstCandidate() }
+                spaceBar
+                    .gridCellColumns(2)
+                functionKeyButton(iconSystemName: "mic") { handleVoiceTap() }
+            }
+            .frame(height: rowHeight)
+        }
+    }
+
+    private func numberKeypadGrid(rowHeight: CGFloat, spacing: CGFloat) -> some View {
+        Grid(horizontalSpacing: spacing, verticalSpacing: spacing) {
+            GridRow {
+                pinyinLayoutReturnKey
+                keyButton("1") { insertTextRespectingComposition("1") }
+                keyButton("2") { insertTextRespectingComposition("2") }
+                keyButton("3") { insertTextRespectingComposition("3") }
+                deleteKey
+            }
+            .frame(height: rowHeight)
+
+            GridRow {
+                stackedKeyButtons("-", "。", spacing: spacing)
+                    .frame(maxHeight: .infinity)
+
+                VStack(spacing: spacing) {
+                    HStack(spacing: spacing) {
+                        keyButton("4") { insertTextRespectingComposition("4") }
+                        keyButton("5") { insertTextRespectingComposition("5") }
+                        keyButton("6") { insertTextRespectingComposition("6") }
+                    }
+                    .frame(height: rowHeight)
+
+                    HStack(spacing: spacing) {
+                        keyButton("7") { insertTextRespectingComposition("7") }
+                        keyButton("8") { insertTextRespectingComposition("8") }
+                        keyButton("9") { insertTextRespectingComposition("9") }
+                    }
+                    .frame(height: rowHeight)
+                }
+                .frame(height: rowHeight * 2 + spacing)
+                .gridCellColumns(3)
+
+                returnButton
+                    .frame(maxHeight: .infinity)
+            }
+            .frame(height: rowHeight * 2 + spacing)
+
+            GridRow {
+                // 所有布局的地球键都固定在左下角，避免切页后肌肉记忆失效。
+                inputModeSwitchKey
+                keyButton("0") { insertTextRespectingComposition("0") }
+                keyButton("，") { insertTextRespectingComposition("，") }
+                spaceBar
+                    .gridCellColumns(2)
+            }
+            .frame(height: rowHeight)
+        }
+    }
+
+    private func punctuationKeypadGrid(rowHeight: CGFloat, spacing: CGFloat) -> some View {
+        Grid(horizontalSpacing: spacing, verticalSpacing: spacing) {
+            GridRow {
+                pinyinLayoutReturnKey
+                keyButton("，") { insertTextRespectingComposition("，") }
+                keyButton("。") { insertTextRespectingComposition("。") }
+                keyButton("？") { insertTextRespectingComposition("？") }
+                deleteKey
+            }
+            .frame(height: rowHeight)
+
+            GridRow {
+                stackedKeyButtons("、", "；", spacing: spacing)
+                    .frame(maxHeight: .infinity)
+
+                VStack(spacing: spacing) {
+                    HStack(spacing: spacing) {
+                        keyButton("：") { insertTextRespectingComposition("：") }
+                        keyButton("（") { insertTextRespectingComposition("（") }
+                        keyButton("）") { insertTextRespectingComposition("）") }
+                    }
+                    .frame(height: rowHeight)
+
+                    HStack(spacing: spacing) {
+                        keyButton("“") { insertTextRespectingComposition("“") }
+                        keyButton("”") { insertTextRespectingComposition("”") }
+                        keyButton("…") { insertTextRespectingComposition("…") }
+                    }
+                    .frame(height: rowHeight)
+                }
+                .frame(height: rowHeight * 2 + spacing)
+                .gridCellColumns(3)
+
+                returnButton
+                    .frame(maxHeight: .infinity)
+            }
+            .frame(height: rowHeight * 2 + spacing)
+
+            GridRow {
+                // 标点页只允许返回拼音页；不提供与数字或其他符号页之间的跳转。
+                inputModeSwitchKey
+                keyButton("！") { insertTextRespectingComposition("！") }
+                keyButton("-") { insertTextRespectingComposition("-") }
+                spaceBar
+                    .gridCellColumns(2)
+            }
+            .frame(height: rowHeight)
+        }
+    }
+
+    private func otherSymbolKeypadGrid(rowHeight: CGFloat, spacing: CGFloat) -> some View {
+        Grid(horizontalSpacing: spacing, verticalSpacing: spacing) {
+            GridRow {
+                // 此页的返回键在左上角；地球键仍固定在左下角。
+                pinyinLayoutReturnKey
+                keyButton("#") { insertTextRespectingComposition("#") }
+                keyButton("@") { insertTextRespectingComposition("@") }
+                keyButton("¥") { insertTextRespectingComposition("¥") }
+                deleteKey
+            }
+            .frame(height: rowHeight)
+
+            GridRow {
+                stackedKeyButtons("+", "=", spacing: spacing)
+                    .frame(maxHeight: .infinity)
+
+                VStack(spacing: spacing) {
+                    HStack(spacing: spacing) {
+                        keyButton("*") { insertTextRespectingComposition("*") }
+                        keyButton("_") { insertTextRespectingComposition("_") }
+                        keyButton("&") { insertTextRespectingComposition("&") }
+                    }
+                    .frame(height: rowHeight)
+
+                    HStack(spacing: spacing) {
+                        keyButton("[") { insertTextRespectingComposition("[") }
+                        keyButton("]") { insertTextRespectingComposition("]") }
+                        keyButton("/") { insertTextRespectingComposition("/") }
+                    }
+                    .frame(height: rowHeight)
+                }
+                .frame(height: rowHeight * 2 + spacing)
+                .gridCellColumns(3)
+
+                returnButton
+                    .frame(maxHeight: .infinity)
+            }
+            .frame(height: rowHeight * 2 + spacing)
+
+            GridRow {
+                inputModeSwitchKey
+                keyButton("%") { insertTextRespectingComposition("%") }
+                keyButton("-") { insertTextRespectingComposition("-") }
+                spaceBar
+                    .gridCellColumns(2)
+            }
+            .frame(height: rowHeight)
         }
     }
 
@@ -309,11 +448,85 @@ public struct KeyboardView: View {
         }
     }
 
+    private var deleteKey: some View {
+        functionKeyButton(iconSystemName: "delete.left") {
+            if nineKeyInput.isComposing {
+                nineKeyInput.deleteBackward()
+            } else {
+                controller?.textDocumentProxy.deleteBackward()
+            }
+        }
+    }
+
+    private var spaceBar: some View {
+        Button(action: {
+            if nineKeyInput.isComposing {
+                commitFirstCandidate()
+            } else {
+                controller?.textDocumentProxy.insertText(" ")
+            }
+        }) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(standardKeyBackgroundColor)
+                    .shadow(color: Color.black.opacity(0.25), radius: 0.5, x: 0, y: 1)
+                Text("空 格")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.primary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private var inputModeSwitchKey: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(functionKeyBackgroundColor)
+                .shadow(color: Color.black.opacity(0.25), radius: 0.5, x: 0, y: 1)
+            InputModeSwitchButton(controller: controller)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var pinyinLayoutReturnKey: some View {
+        Button(action: { switchKeyboardLayout(to: .letters) }) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(functionKeyBackgroundColor)
+                    .shadow(color: Color.black.opacity(0.25), radius: 0.5, x: 0, y: 1)
+                HStack(spacing: 3) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 11, weight: .bold))
+                    Text("拼音")
+                        .font(.system(size: 13, weight: .medium))
+                }
+                .foregroundColor(.primary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .accessibilityLabel("返回拼音键盘")
+    }
+
     private func appendNineKeyDigit(_ digit: Character) {
         nineKeyInput.append(
             digit,
             contextBeforeInput: controller?.textDocumentProxy.documentContextBeforeInput
         )
+    }
+
+    /// Changing pages is also a composition boundary, matching the system
+    /// keyboard's behavior and ensuring a half-entered nine-key word is never
+    /// silently lost behind the numeric or symbol page.
+    private func switchKeyboardLayout(to layout: KeyboardLayout) {
+        guard keyboardLayout != layout else { return }
+        if nineKeyInput.isComposing {
+            if let composition = nineKeyInput.commitFirstCandidate() {
+                controller?.textDocumentProxy.insertText(composition)
+            } else {
+                nineKeyInput.cancelComposition()
+            }
+        }
+        keyboardLayout = layout
     }
 
     private func commit(_ candidate: NineKeyCandidate) {
@@ -344,6 +557,24 @@ public struct KeyboardView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    private func layoutKeyButton(_ title: String, action: @escaping () -> Void) -> some View {
+        functionKeyButton(title: title, action: action)
+    }
+
+    private func stackedKeyButtons(
+        _ upperTitle: String,
+        _ lowerTitle: String,
+        spacing: CGFloat
+    ) -> some View {
+        VStack(spacing: spacing) {
+            keyButton(upperTitle) { insertTextRespectingComposition(upperTitle) }
+                .frame(maxHeight: .infinity)
+            keyButton(lowerTitle) { insertTextRespectingComposition(lowerTitle) }
+                .frame(maxHeight: .infinity)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func functionKeyButton(title: String? = nil, iconSystemName: String? = nil, action: @escaping () -> Void) -> some View {
